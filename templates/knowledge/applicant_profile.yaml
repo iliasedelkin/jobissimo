@@ -1,0 +1,47 @@
+# Applicant profile — canonical form-fill facts for /apply.
+# Lives at $JOBISSIMO_HOME/applicant_profile.yaml (written by /setup S4).
+# /apply fills application forms ONLY from this file + the job's final assets
+# + knowledge/. Any form question not answerable from those sources -> pause
+# and ask the user. Never improvise an answer.
+#
+# Fields marked `confirm: true` were NOT confirmed by the user yet — /apply
+# must ask before using them, then (with the user's confirmation) the flag
+# may be removed.
+
+identity:
+  full_name:
+  first_name:
+  last_name:
+  email:
+  phone:            # international format, "+…"
+  location_city:
+  location_country:
+  date_of_birth:    # only used where the locale declares it conventional
+
+links:
+  linkedin:
+  github:
+  portfolio:
+
+languages:          # mirrors knowledge/skills_inventory.md § Languages
+  - {language: , level: }
+
+work_authorization:
+  work_permit: {value: , confirm: true}
+  needs_visa_sponsorship: {value: , confirm: true}
+  citizenship: {value: , confirm: true}
+
+logistics:
+  notice_period: {value: , confirm: true}
+  earliest_start: {value: , confirm: true}
+  salary_expectation: {value: , confirm: true}
+  willing_to_relocate: {value: , confirm: true}
+  remote_ok: true
+
+defaults:
+  referral_source: "Job board"
+  cover_letter_upload: cover_letter.docx
+  cv_upload: cv.docx
+
+eeo:                # standard EEO/diversity questions
+  policy: "Prefer not to say, unless the user instructs otherwise per question."
