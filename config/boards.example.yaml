@@ -1,0 +1,20 @@
+# config/boards.yaml — this install's working board list + ROI ledger.
+# /setup S8 generates this from the pack's boards.yaml filtered by your
+# targets and detected capabilities; /optimise re-tiers it from your own
+# telemetry. Copy to config/boards.yaml (gitignored).
+# Schema: engine/schemas/boards.schema.json.
+#
+# Tier 1 is swept every run. Tier 2 gets ONE rotating probe per run, logged
+# even when barren; two consecutive barren probes demote a board to tier 3.
+# Company-direct career pages rank above aggregators; generic aggregators
+# start on probation until they earn shortlists in your data.
+
+tiers:
+  tier1:
+    - {slug: watchlist, name: Company watchlist, url: "positioning/company_watchlist.md", kind: watchlist}
+    # add the boards from packs/product/boards.yaml that match your targets/region
+  tier2: []
+  tier3: []
+
+# /optimise-maintained yield ledger, per source slug.
+roi: {}

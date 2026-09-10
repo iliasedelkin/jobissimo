@@ -1,0 +1,13 @@
+# config/capabilities.yaml — what this machine/session can do.
+# Written by /setup S0 (preflight probe) and refreshed by /doctor --capabilities.
+# Every command reads this and degrades honestly: a missing capability is
+# never a blocker, only a smaller feature set.
+
+tools:
+  pandoc: true          # DOCX export
+  pdf_engine: true      # tectonic / xelatex / libreoffice — PDF export (optional)
+  pdftotext: false      # PDF -> text at intake (OCR fallback if absent)
+
+adapters:
+  browse: claude-in-chrome   # claude-in-chrome | playwright | webfetch | manual
+  mail: gmail-mcp            # gmail-mcp | imap | none

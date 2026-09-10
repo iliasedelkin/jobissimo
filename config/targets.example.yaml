@@ -1,0 +1,47 @@
+# config/targets.yaml — ranked target roles, geography, seniority, intake quotas.
+# Copy to config/targets.yaml (gitignored). Schema: engine/schemas/targets.schema.json.
+# Only the top target (rank 1) is needed to reach your first result; the rest
+# can be deferred and are surfaced by /enrich.
+
+geography:
+  base_city: Your City
+  base_country: Your Country
+  onsite_ok_regions: [Your Country]
+  remote_ok: true
+  relocation: "EU with friction"   # or "no", "anywhere"
+
+seniority:
+  baseline_years: 8                 # seniority match is scored by years REQUIRED, not title
+  stretch_down_cap_in_flight: 3     # max concurrent below-level experiment applications
+
+company_preferences:
+  preferred_stages: [Series A, Series B, Series C, scale-up]
+  avoid: [PMO-driven enterprise, banking IT services, public-sector consulting]
+
+targets:
+  - cluster: PM
+    rank: 1
+    hunt_share: 0.5
+    seniority_band: mid-senior
+    stretch_policy: none
+    title_synonyms: [Product Manager, Senior Product Manager]
+    queries:
+      en: ["Product Manager remote Europe", "Senior Product Manager SaaS"]
+    must_signals: [discovery, ownership, data-driven, cross-functional]
+    reject_signals: [ticket execution only, no data access]
+    positioning_cluster: PM
+  - cluster: PO
+    rank: 2
+    hunt_share: 0.3
+    seniority_band: mid-senior
+    stretch_policy: none
+  - cluster: Analyst
+    rank: 3
+    hunt_share: 0.2
+    seniority_band: mid
+    experiment: true
+    tranche_cap: 3
+
+# /optimise-owned: observed response evidence behind the thresholds above.
+# Runs never edit this; /optimise proposes changes, the user approves.
+calibration: {}

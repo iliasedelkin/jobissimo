@@ -1,0 +1,15 @@
+# config/languages.yaml — application languages + declared proficiency.
+# Copy to config/languages.yaml (gitignored). Schema: engine/schemas/languages.schema.json.
+# The generator NEVER writes above your declared register — you have to defend
+# every line in an interview. B2 means plain, concrete sentences.
+# Each configured language pulls its market conventions and ATS synonym
+# bridges from the active pack's locales/<code>.yaml.
+
+languages:
+  en:
+    proficiency: native   # A1-C2 or "native"
+    primary: true
+    markets: [remote-global, remote-EU]
+  it:
+    proficiency: B2
+    markets: [Italy]

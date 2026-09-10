@@ -1,0 +1,27 @@
+# config/pipeline.yaml — this install's identity, thresholds, and pack.
+# Copy to config/pipeline.yaml (gitignored) and let /setup fill it, or edit
+# by hand. Schema: engine/schemas/pipeline.schema.json.
+
+pack: product          # active pack under packs/
+
+identity:
+  name: Your Name      # audit.py checks the CV name header against this
+  years_experience: 8  # drives CV length target and seniority judgments
+
+mail:
+  # The ONLY mailbox the pipeline may read. The mail account guard verifies
+  # this before reading a single message. Leave unset if you have no mail
+  # adapter — /hunt and /brief just skip their mail phases.
+  account: you.pipeline@example.com
+
+thresholds:
+  ats_min_score: 75        # /prepare regenerates below this (max 2 iterations)
+  shortlist_depth_cap: 25  # above this, /hunt raises the fit bar and halves target_count
+  adaptive_fit_bar: 4.0
+  velocity_sla_days: 5     # prepare-and-apply window for high-fit jobs
+
+# Optional: extra role clusters on top of the pack's roles.yaml.
+# extra_role_clusters: [DataPM]
+
+# Optional: override the location_fit enum. Default:
+# location_fit_values: [match, remote_ok, relocation_eu, relocation_non_eu, reject]
