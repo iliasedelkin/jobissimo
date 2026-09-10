@@ -1,0 +1,56 @@
+# Italian locale — VERIFIED (ported from a working install that ran Italian
+# applications through the full audit/ATS chain).
+verified: true
+
+# Market conventions ---------------------------------------------------------
+# A personal-details block (date of birth, residence/authorization status) is
+# conventional on Italian CVs and pre-empts the residency/authorization
+# question a domestic employer will otherwise raise. The exact same block is
+# an age-discrimination anti-pattern in Anglo markets — which is why this is
+# a locale decision, never a global one (see engine/rules/language_rules.md).
+personal_details_block: conventional
+personal_details_fields: [date_of_birth, residence_permit, tax_status]
+personal_details_labels:
+  date_of_birth: "Data di nascita"
+  residence_permit: "Permesso di soggiorno"
+  tax_status: "Partita IVA"
+photo: unknown          # not required in tech; never add one unasked
+cv_length_norm: "2 pages"
+formality: "professional; plain and concrete"
+date_convention: canonical   # dates stay canonical English (audit keys on them)
+
+# Register note: professional B2-level register unless the candidate's
+# declared proficiency (config/languages.yaml) is higher — plain, concrete
+# sentences the candidate can defend in an interview.
+
+# ATS synonym bridges --------------------------------------------------------
+# Map common Italian JD vocabulary into the English taxonomy groups so the
+# JD-vocabulary layer extracts meaningfully from Italian postings. Wording
+# bridges only — same evidenced skill, never a neighboring one.
+synonyms:
+  requirements: [requisiti, requisito]
+  communication: [comunicazione, comunicare]
+  collaboration: [collaborazione, collaborare, collaborativo]
+  stakeholder management: [gestione degli stakeholder, gestione stakeholder]
+  delivery: [consegna, rilascio]
+  release: [rilascio, rilasci]
+  customer: [cliente, clienti, utente, utenti]
+  research: [ricerca]
+  growth: [crescita]
+  metrics: [metriche]
+  success metrics: [metriche di successo]
+  product discovery: [scoperta del prodotto]
+  roadmap: [piano di prodotto]
+  ownership: [responsabilità end-to-end, piena responsabilità]
+  prioritisation: [prioritizzazione, definizione delle priorità]
+  data-driven: [guidato dai dati, basato sui dati]
+  ambiguity: [ambiguità]
+  analytics: [analisi dei dati, analitica]
+  strategy: [strategia, strategica, strategico]
+  launch: [lancio, lanciare]
+  automation: [automazione, automatizzando, automatizzato]
+  integration: [integrazione, integrazioni]
+  cross-functional: [cross-funzionale, cross-funzionali, interfunzionale]
+  backlog: [gestione del backlog]
+  feedback: [cicli di feedback]
+  agile: [metodologia agile, cerimonie agile]

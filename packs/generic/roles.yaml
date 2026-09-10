@@ -1,0 +1,8 @@
+# Generic pack roles — one open cluster. /setup asks the user to name their
+# target role(s) and adds each as an extra_role_clusters entry in
+# config/pipeline.yaml with competencies derived from their own evidence.
+clusters:
+  General:
+    title: General
+    competencies: []
+    adjacent: []

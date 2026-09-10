@@ -1,0 +1,18 @@
+# Generic pack — minimal fallback for role families no pack covers yet.
+# /setup generates a starter taxonomy for this pack from the user's own
+# intake documents (skills claimed across CVs become hard_skills candidates)
+# and writes it to config/ overrides — the pack itself stays minimal.
+# Building a real pack for your domain is the highest-value contribution;
+# see CONTRIBUTING.md.
+name: generic
+description: Minimal domain-agnostic fallback pack. Role taxonomy and ATS lexicon are generated at setup from the user's own documents.
+version: "1.0"
+
+figure_nouns: [months, weeks, days, hours, years, people, teams, clients,
+               customers, users, projects, locations]
+
+files:
+  roles: roles.yaml
+  evaluation: evaluation.md
+  ats_keywords: ats_keywords.yaml
+  ats_synonyms: ats_synonyms.yaml

@@ -1,0 +1,9 @@
+# Generic pack synonym table — morphology-only starters. Add entries when
+# /optimise reports recurring near-misses. Wording bridges only, never a
+# neighboring skill.
+
+communication: [communicate, communicating, communication skills]
+collaboration: [collaborative, collaborate, collaborating]
+leadership: [leading, led]
+prioritisation: [prioritization, prioritize, prioritise]
+ownership: [owner, end-to-end ownership]

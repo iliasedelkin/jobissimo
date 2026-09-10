@@ -1,0 +1,105 @@
+# ATS keyword taxonomy — used by scripts/ats_score.py.
+# NOTE: the scorer EXTRACTS keyword candidates from the JD text itself
+# (salient uni/bigrams, freq>=2). This taxonomy is not the candidate SOURCE —
+# it is a lexicon/normaliser: it classifies extracted terms as hard vs soft,
+# and any taxonomy term present in the JD is unioned in as a known-skill
+# booster. (A taxonomy∩JD candidate set understates domain vocabulary the
+# list never contained and inflates coverage toward 100%.)
+#
+# Format: section name + "- term" lines. Keep soft_skills current so
+# classification stays accurate; add hard terms only for known-skill boosting.
+#
+# TRUTH RULE: a missing keyword may only be added to the CV if it is evidenced
+# in knowledge/ (check evidence_map.md / skills_inventory.md first). Otherwise
+# it goes to gap_suggestions.md.
+
+hard_skills:
+  - acceptance criteria
+  - agile
+  - scrum
+  - kanban
+  - backlog
+  - definition of done
+  - user stories
+  - sprint
+  - product discovery
+  - discovery
+  - product delivery
+  - delivery
+  - deployment
+  - release
+  - release planning
+  - roadmap
+  - prioritisation
+  - requirements
+  - product management
+  - product manager
+  - product owner
+  - product vision
+  - vision
+  - strategy
+  - product launch
+  - launch
+  - go-to-market
+  - metrics
+  - success metrics
+  - kpi
+  - okr
+  - analytics
+  - product analytics
+  - data-driven
+  - a/b testing
+  - experimentation
+  - research
+  - user research
+  - ux
+  - ux design
+  - ui
+  - design
+  - prototyping
+  - wireframes
+  - feedback
+  - customer
+  - onboarding
+  - retention
+  - engagement
+  - growth
+  - b2b
+  - b2c
+  - saas
+  - api
+  - sql
+  - python
+  - ai
+  - machine learning
+  - automation
+  - technical
+  - integration
+  - documentation
+  - written
+  - status
+  - problem
+  - product
+  - stakeholders
+  - crm
+  - p&l
+
+soft_skills:
+  - communication
+  - communication skills
+  - stakeholder communication
+  - stakeholder management
+  - leadership
+  - collaboration
+  - team collaboration
+  - collaborative
+  - ownership
+  - execution
+  - ambiguity
+  - pragmatic
+  - autonomy
+  - initiative
+  - adaptability
+  - problem solving
+  - cross-functional
+  - mentoring

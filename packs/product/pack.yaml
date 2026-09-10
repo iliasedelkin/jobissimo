@@ -1,0 +1,20 @@
+# Product pack — the reference domain pack (product/analyst role family).
+# A pack is never edited in place: user overrides land in config/, and pack
+# improvements go upstream as PRs. See docs/packs.md and engine/schemas/pack.schema.json.
+name: product
+description: Product Owner / Product Manager / Business Analyst / Project Manager / Product-Growth Analyst / Operations role family, with ATS lexicons, board catalogue, evaluation rubric, and en/it locale conventions.
+version: "1.0"
+
+# Nouns that make a number a "figure" for the audit's repeated-figure check
+# (tailoring_rules §5a). Extend when the audit misses a repeated quantity.
+figure_nouns: [months, weeks, days, hours, years, locations, stores, people,
+               teams, engineers, clients, customers, users, markets, countries,
+               releases, sprints]
+
+files:
+  roles: roles.yaml
+  evaluation: evaluation.md
+  ats_keywords: ats_keywords.yaml
+  ats_synonyms: ats_synonyms.yaml
+  boards: boards.yaml
+  locales: locales/

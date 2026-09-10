@@ -1,0 +1,117 @@
+# Board catalogue — product pack.
+# /setup S8 filters this by config/targets.yaml + capabilities.yaml into a
+# working config/boards.yaml; /optimise re-tiers that file from the install's
+# own telemetry. Access notes here are factual observations (dated where they
+# matter); yield guidance is neutral field experience:
+#
+#   - Company-direct career pages rank above aggregators — they are the
+#     highest-converting source class.
+#   - Generic aggregators start ON PROBATION (tier 2/3) until they earn
+#     shortlists in this install's own data.
+#   - Tier 1 is swept every run. Tier 2 gets ONE rotating probe per run,
+#     logged even when barren; two consecutive barren probes demote a board
+#     to tier 3. Tier 3 is skipped unless the user asks.
+#   - Portal diversity is a target, not a gate — a short run that reports
+#     beats a complete run that misses its window.
+
+tier1:
+  - {slug: linkedin, name: LinkedIn Jobs, url: "https://www.linkedin.com/jobs", kind: portal,
+     access: "needs logged-in session for search; guest posting endpoint works without one",
+     queries: ["Product Owner {region}", "Business Analyst product {region}", "Product Manager {region} remote", "Growth Analyst {region}", "Product Owner remote {wider-region}"]}
+  - {slug: watchlist, name: Company watchlist, url: "positioning/company_watchlist.md", kind: watchlist,
+     access: "swept via each company's careers page / ATS board API",
+     queries: ["(titles matched against config/targets.yaml)"]}
+  - {slug: topremote, name: TopRemoteJobs.eu, url: "https://www.topremotejobs.eu/jobs/product-management", kind: aggregator,
+     access: "open; shows posting dates", queries: ["browse product management listings"]}
+  - {slug: wwr, name: We Work Remotely – Product, url: "https://weworkremotely.com/categories/remote-product-jobs", kind: portal,
+     access: "open", queries: ["browse recent"]}
+
+tier2:
+  - {slug: vennie, name: Vennie (ex-Mind the Product), url: "https://vennie.ai", kind: portal, access: open,
+     queries: ["Product Manager", "Product Owner"]}
+  - {slug: remoteineu, name: Remote in Europe, url: "https://remoteineurope.com", kind: aggregator, access: open,
+     queries: ["Product Manager", "Product Owner"]}
+  - {slug: eudatajobs, name: EU Data Jobs, url: "https://eudatajobs.com", kind: portal, access: open,
+     queries: ["Product Analyst", "Business Analyst", "Growth Analyst"]}
+  - {slug: englishjobs, name: EnglishJobs.it, url: "https://englishjobs.it", kind: portal, access: open,
+     queries: ["Product Manager", "Product Owner", "Business Analyst"]}
+  - {slug: glassdoor, name: Glassdoor, url: "https://www.glassdoor.com", kind: portal, access: "login-nagged; usable logged out",
+     queries: ["Product Owner {region}", "Product Manager {region} remote"]}
+  - {slug: startupjobs, name: Startup Jobs Italy, url: "https://www.startupjobsitaly.com", kind: portal, access: open,
+     queries: ["Product", "Business Analyst"]}
+  - {slug: cdpvc, name: CDP Venture Capital – XJobs, url: "https://xjobs.cdpventurecapital.it", kind: portal, access: open,
+     queries: ["Product Manager", "Product Owner", "Analyst"]}
+  - {slug: himalayas, name: Himalayas, url: "https://himalayas.app", kind: aggregator,
+     access: "Cloudflare interstitial observed 2026-09; not bypassed, by policy",
+     queries: ["Product Manager", "Product Owner", "region filter"]}
+  - {slug: remotive, name: Remotive, url: "https://remotive.com", kind: aggregator, access: open,
+     queries: ["Product Manager", "Product Owner"]}
+  - {slug: builtin, name: Built In, url: "https://builtin.com/jobs", kind: portal, access: open,
+     queries: ["Product Manager remote", "Product Owner"]}
+  - {slug: italiaremote, name: ItaliaRemote (company list), url: "https://github.com/italiaremote/awesome-italia-remote", kind: newsletter,
+     access: "a curated company list, not a board — visit promising career pages directly; watchlist candidates",
+     queries: ["browse"]}
+  - {slug: dynamite, name: Dynamite Jobs, url: "https://dynamitejobs.com", kind: aggregator, access: open,
+     queries: ["Product Manager", "Product Owner", "remote filter"]}
+  - {slug: indeed, name: Indeed, url: "https://www.indeed.com", kind: portal, access: "aggressive bot detection logged out",
+     queries: ["Product Owner", "Business Analyst", "Product Manager", "{region}/Remote"]}
+  - {slug: remoteok, name: Remote OK, url: "https://remoteok.com", kind: aggregator, access: open,
+     queries: ["product-manager", "business-analyst", "region filter"]}
+  - {slug: workingnomads, name: Working Nomads, url: "https://www.workingnomads.com", kind: aggregator, access: open,
+     queries: ["Product Manager", "Product Owner", "region filter"]}
+  - {slug: 4dayweek, name: 4dayweek.io, url: "https://4dayweek.io/remote-product-jobs", kind: portal, access: open,
+     queries: ["browse product listings"]}
+  - {slug: arcdev, name: Arc.dev, url: "https://arc.dev/remote-jobs?jobRoles=product_manager", kind: portal, access: open,
+     queries: ["browse"]}
+
+tier3:
+  - {slug: euremote, name: EU Remote Jobs, url: "https://euremotejobs.com", kind: aggregator,
+     access: "403 as of 2026-07"}
+  - {slug: wellfound, name: Wellfound, url: "https://wellfound.com", kind: portal,
+     access: "403 as of 2026-07 – needs logged-in session"}
+  - {slug: startupjobs-it, name: Startup.jobs – Italy, url: "https://startup.jobs/locations/italy", kind: aggregator,
+     access: "403 as of 2026-07"}
+  - {slug: productheroes, name: Product Heroes, url: "https://www.productheroes.it/job", kind: aggregator,
+     access: "small board; publishes NO posting dates, so age rules cannot be evaluated without opening each redirect"}
+  - {slug: jobgether, name: Jobgether, url: "https://jobgether.com", kind: aggregator,
+     access: "hidden-company listings age badly"}
+  - {slug: infojobs, name: InfoJobs Italy, url: "https://www.infojobs.it", kind: portal,
+     access: "strict filters; many low-scope roles"}
+  - {slug: monster, name: Monster, url: "https://www.monster.it", kind: portal,
+     access: "legacy board; lowest signal"}
+  - {slug: wearedevs, name: WeAreDevelopers, url: "https://www.wearedevelopers.com/en/jobs", kind: portal,
+     access: "occasional technical PM/PO"}
+  - {slug: f6s, name: F6S, url: "https://www.f6s.com/jobs", kind: portal,
+     access: "broad startup board; filter carefully"}
+
+# Job-alert sender domains — the mail-discovery phase (hunt Step 0b / brief)
+# restricts alert scanning to these senders. Keep in sync with the boards
+# above; /optimise proposes additions when alert mail arrives from a new
+# board the install actually uses.
+alert_sender_domains:
+  - linkedin.com
+  - indeed.com
+  - it.indeed.com
+  - glassdoor.com
+  - glassdoor.it
+  - productheroes.it
+  - vennie.ai
+  - euremotejobs.com
+  - wellfound.com
+  - angel.co
+  - weworkremotely.com
+  - remotive.com
+  - himalayas.app
+  - builtin.com
+  - startupjobsitaly.com
+  - cdpventurecapital.it
+  - eudatajobs.com
+  - englishjobs.it
+  - topremotejobs.eu
+  - remoteineurope.com
+  - jobgether.com
+  - arc.dev
+  - remoteok.com
+  - 4dayweek.io
+  - workingnomads.com
+  - dynamitejobs.com

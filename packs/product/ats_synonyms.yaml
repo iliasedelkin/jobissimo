@@ -1,0 +1,53 @@
+# ATS synonym table — used by scripts/ats_score.py for keyword normalization.
+# Format (kept deliberately simple; parsed by a minimal stdlib reader):
+#   canonical term: [synonym, synonym, ...]
+# Matching is case-insensitive with light stemming. A JD keyword counts as
+# covered if the keyword itself OR any synonym of its canonical group appears
+# in the CV. Add entries here when /optimise reports recurring near-misses.
+# NOTE: synonyms only bridge WORDING, never FACTS — a synonym must describe the
+# same evidenced skill, not a neighboring one (that would be a truth violation).
+# Language-specific bridges live in locales/<code>.yaml, merged per the
+# configured languages.
+
+product owner: [product ownership, PO]
+product manager: [product management, PM]
+business analyst: [business analysis, BA]
+agile: [scrum, agile/scrum]
+scrum: [agile/scrum, scrum framework]
+kpi: [kpis, key performance indicator, key performance indicators]
+okr: [okrs, objectives and key results]
+a/b testing: [ab testing, split testing, experimentation]
+stakeholder management: [stakeholder alignment, stakeholder communication]
+roadmap: [roadmapping, product roadmap, roadmap prioritization]
+backlog: [backlog ownership, backlog management, product backlog]
+data-driven: [data driven, data-backed, data-informed]
+sql: [postgresql, postgres]
+analytics: [analytics infrastructure, data analysis]
+discovery: [product discovery, user research, customer discovery]
+cross-functional: [cross functional, crossfunctional]
+prioritization: [prioritisation, prioritize, prioritise]
+api: [apis, rest api, rest apis]
+bi tools: [looker studio, looker, tableau, power bi]
+p&l: [profit and loss, pnl, ebitda]
+user stories: [user story, story writing]
+go-to-market: [gtm, go to market]
+saas: [b2b saas, software as a service]
+machine learning: [ml]
+ownership: [owner, backlog ownership, kpi ownership, end-to-end ownership]
+fluency: [fluent, fluency, professional fluency]
+collaboration: [collaborative, collaborate, collaborating, team collaboration, cross-functional collaboration]
+communication: [communicate, communicates, communicating, communication skills, stakeholder communication, written communication, async communication, asynchronous communication, clear async]
+leadership: [leading, led, cross-functional leadership]
+execution: [executing, delivery execution, focusing execution]
+release planning: [release cycles, release cadence]
+prioritisation: [prioritization, prioritize, prioritise, prioritized, prioritised]
+requirements: [product requirements, requirements clarification, integration requirements]
+problem: [problem framing, problem solving, root of the problem]
+research: [user research, industry research, stakeholder research]
+feedback: [feedback cycles, feedback-driven, user feedback]
+documentation: [docs, integration documentation]
+customer: [customers, customer-facing]
+stakeholders: [stakeholder]
+ambiguity: [ambiguous, ambiguous environments]
+ux: [user experience, ui/ux, ux design, ux principles, user journey, user journey mapping, ux collaboration]
+artificial intelligence: [ai]

@@ -1,0 +1,19 @@
+# Generic pack taxonomy — deliberately near-empty. The scorer extracts
+# keywords from each JD itself, so scoring works without a curated list; this
+# file only classifies hard vs soft. /setup seeds soft_skills below and adds
+# hard terms from the user's own evidenced skills.
+
+hard_skills:
+  - documentation
+  - reporting
+  - automation
+
+soft_skills:
+  - communication
+  - leadership
+  - collaboration
+  - ownership
+  - problem solving
+  - adaptability
+  - cross-functional
+  - mentoring

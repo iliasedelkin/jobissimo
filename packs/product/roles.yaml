@@ -1,0 +1,37 @@
+# Role clusters for the product pack. Cluster ids are the values db.py
+# accepts for role_cluster; each cluster's canonical competency set is what
+# /setup S6 computes evidence fit against.
+clusters:
+  PO:
+    title: Product Owner
+    competencies: [backlog ownership, user stories, acceptance criteria,
+                   sprint planning, stakeholder management, prioritisation,
+                   agile, delivery, data-driven decisions]
+    adjacent: [PM, BA]
+  PM:
+    title: Product Manager
+    competencies: [product discovery, roadmap, product vision, metrics,
+                   experimentation, go-to-market, user research,
+                   cross-functional leadership, prioritisation]
+    adjacent: [PO, Analyst]
+  BA:
+    title: Business Analyst
+    competencies: [requirements, process analysis, stakeholder management,
+                   documentation, sql, data analysis, gap analysis,
+                   acceptance criteria]
+    adjacent: [PO, Analyst]
+  PjM:
+    title: Project Manager
+    competencies: [delivery, planning, risk management, stakeholder
+                   management, cross-functional coordination, reporting]
+    adjacent: [PO]
+  Analyst:
+    title: Product / Growth Analyst
+    competencies: [sql, analytics, a/b testing, kpi design, dashboards,
+                   experimentation, funnel analysis, data storytelling]
+    adjacent: [BA, PM]
+  Ops:
+    title: Operations Manager
+    competencies: [process design, automation, kpi ownership, vendor
+                   management, cross-functional coordination, reporting]
+    adjacent: [PjM, BA]

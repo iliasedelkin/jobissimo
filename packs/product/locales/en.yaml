@@ -1,0 +1,14 @@
+# English (Anglo-market) locale — VERIFIED.
+verified: true
+
+# Market conventions ---------------------------------------------------------
+# A personal-details block (date of birth, marital status, photo) on a CV is
+# an age/appearance-discrimination anti-pattern in Anglo markets and can be
+# down-ranked by screeners. Never add one to an en CV.
+personal_details_block: anti_pattern
+photo: anti_pattern
+cv_length_norm: "1 page under 5 years experience, 2 pages over"
+formality: "direct professional; contractions acceptable in startup register"
+date_convention: canonical
+
+# No synonym bridges needed — the base taxonomy is English.

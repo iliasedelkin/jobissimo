@@ -1,0 +1,18 @@
+# French locale — STUB, NOT VERIFIED. A native contributor should confirm the
+# market conventions below (see CONTRIBUTING.md § Locale conventions — a
+# small, well-scoped, high-impact contribution for this market).
+# An unverified stub falls back to NEUTRAL behaviour: no personal-details
+# block, no photo, no invented conventions.
+verified: false
+
+personal_details_block: unknown   # confirm: conventional or anti-pattern here?
+photo: unknown                    # confirm: expected on CVs in this market?
+cv_length_norm: unknown
+formality: unknown
+date_convention: canonical        # dates always stay canonical (audit keys on them)
+
+# ATS synonym bridges: none yet. Add them when postings in this language show
+# recurring unmatched vocabulary (via /optimise). Wording bridges only —
+# same evidenced skill, never a neighboring one.
+# synonyms:
+#   requirements: [<local term>]
