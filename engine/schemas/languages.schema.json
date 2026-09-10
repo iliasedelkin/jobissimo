@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "config/languages.yaml — application languages + declared proficiency",
+  "type": "object",
+  "properties": {
+    "languages": {
+      "type": "object",
+      "description": "Keyed by ISO 639-1 code. Each configured language pulls its market conventions and synonym bridges from the pack locale file.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "proficiency": {"type": "string", "description": "CEFR level (A1–C2) or 'native'. The generator NEVER writes above this register — the candidate must be able to defend every line in an interview."},
+          "primary": {"type": "boolean", "description": "The default application language."},
+          "markets": {"type": "array", "items": {"type": "string"}, "description": "Geographies this language applies to."}
+        },
+        "required": ["proficiency"]
+      }
+    }
+  },
+  "required": ["languages"]
+}

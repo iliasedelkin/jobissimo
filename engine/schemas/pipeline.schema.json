@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "config/pipeline.yaml — this install's identity, paths, thresholds, pack selection",
+  "type": "object",
+  "properties": {
+    "pack": {"type": "string", "description": "Active pack name under packs/ (default: product)."},
+    "identity": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string", "description": "Candidate full name — audit.py checks the CV name header against this."},
+        "years_experience": {"type": "number", "description": "Total in-cluster years; drives CV length target and seniority judgments."}
+      },
+      "required": ["name"]
+    },
+    "mail": {
+      "type": "object",
+      "properties": {
+        "account": {"type": "string", "description": "The ONLY mailbox the pipeline may read. The mail account guard verifies this before reading anything."}
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "properties": {
+        "ats_min_score": {"type": "integer", "default": 75, "description": "Deterministic ATS score below which /prepare regenerates (max 2 iterations)."},
+        "shortlist_depth_cap": {"type": "integer", "default": 25, "description": "Adaptive intake: above this many shortlisted+ready, /hunt raises the fit bar and halves target_count."},
+        "adaptive_fit_bar": {"type": "number", "default": 4.0},
+        "velocity_sla_days": {"type": "integer", "default": 5, "description": "Prepare-and-apply window for high-fit jobs before liveness must be re-verified."}
+      }
+    },
+    "extra_role_clusters": {
+      "type": "array", "items": {"type": "string"},
+      "description": "Cluster ids added on top of the pack's roles.yaml."
+    },
+    "location_fit_values": {
+      "type": "array", "items": {"type": "string"},
+      "description": "Allowed location_fit enum. Default: match, remote_ok, relocation_eu, relocation_non_eu, reject. db.py validates against this UNION values already in the DB."
+    }
+  },
+  "required": ["identity"]
+}

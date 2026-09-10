@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "config/boards.yaml — this install's tiered board list + query templates + ROI ledger",
+  "type": "object",
+  "properties": {
+    "tiers": {
+      "type": "object",
+      "properties": {
+        "tier1": {"$ref": "#/$defs/boardList", "description": "Swept every run."},
+        "tier2": {"$ref": "#/$defs/boardList", "description": "One rotating probe per run, logged even when barren; two consecutive barren probes demote to tier 3."},
+        "tier3": {"$ref": "#/$defs/boardList", "description": "Skipped unless the user asks."}
+      }
+    },
+    "roi": {
+      "type": "object",
+      "description": "/optimise-maintained ledger: per-slug found/shortlisted/applied/responded counts from this install's own telemetry.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "found": {"type": "integer"}, "shortlisted": {"type": "integer"},
+          "applied": {"type": "integer"}, "responded": {"type": "integer"},
+          "barren_probes": {"type": "integer"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "boardList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "slug": {"type": "string", "description": "Source slug used in job_ids."},
+          "name": {"type": "string"},
+          "url": {"type": "string"},
+          "queries": {"type": "array", "items": {"type": "string"}},
+          "access": {"type": "string", "description": "Factual access note: open | login-walled | 403 as of <date> | no posting dates | needs logged-in session."},
+          "kind": {"type": "string", "enum": ["portal", "aggregator", "company_direct", "watchlist", "newsletter"]}
+        },
+        "required": ["slug", "url"]
+      }
+    }
+  }
+}

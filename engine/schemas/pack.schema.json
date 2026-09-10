@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "packs/<name>/pack.yaml — a domain pack's manifest",
+  "type": "object",
+  "properties": {
+    "name": {"type": "string"},
+    "description": {"type": "string"},
+    "version": {"type": "string"},
+    "figure_nouns": {
+      "type": "array", "items": {"type": "string"},
+      "description": "Nouns that make a number a 'figure' for the audit's repeated-figure check (e.g. months, locations, users)."
+    },
+    "files": {
+      "type": "object",
+      "description": "Informational manifest of the pack's contents.",
+      "properties": {
+        "roles": {"type": "string", "const": "roles.yaml"},
+        "evaluation": {"type": "string", "const": "evaluation.md"},
+        "ats_keywords": {"type": "string", "const": "ats_keywords.yaml"},
+        "ats_synonyms": {"type": "string", "const": "ats_synonyms.yaml"},
+        "boards": {"type": "string", "const": "boards.yaml"},
+        "locales": {"type": "string", "const": "locales/"}
+      }
+    }
+  },
+  "required": ["name", "description"],
+  "$comment": "roles.yaml shape: clusters: {<id>: {title, competencies: [..], adjacent: [..]}}. locales/<code>.yaml shape: verified: bool, personal_details_block: conventional|anti_pattern|unknown, personal_details_fields: [..], photo: expected|anti_pattern|unknown, cv_length_norm, formality, synonyms: {canonical: [bridges]}. A pack is never edited in place; user overrides land in config/."
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "config/targets.yaml — ranked target roles + intake quotas + geography",
+  "type": "object",
+  "properties": {
+    "geography": {
+      "type": "object",
+      "description": "The candidate's location constraints — replaces hardcoded geography in evaluation rules.",
+      "properties": {
+        "base_city": {"type": "string"},
+        "base_country": {"type": "string"},
+        "onsite_ok_regions": {"type": "array", "items": {"type": "string"}},
+        "remote_ok": {"type": "boolean"},
+        "relocation": {"type": "string", "description": "e.g. 'EU with friction', 'no', 'anywhere'"}
+      }
+    },
+    "seniority": {
+      "type": "object",
+      "properties": {
+        "baseline_years": {"type": "number", "description": "Years of in-cluster experience; seniority match is scored by years REQUIRED in the JD, not by title."},
+        "stretch_down_cap_in_flight": {"type": "integer", "default": 3, "description": "Max concurrent below-level experiment applications."}
+      }
+    },
+    "company_preferences": {
+      "type": "object",
+      "properties": {
+        "preferred_stages": {"type": "array", "items": {"type": "string"}},
+        "avoid": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "targets": {
+      "type": "array",
+      "description": "Ordered, rank 1 first. Only the top target is needed for the first result; the rest can be deferred to the queue.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "cluster": {"type": "string", "description": "Cluster id from the pack's roles.yaml."},
+          "rank": {"type": "integer"},
+          "hunt_share": {"type": "number", "description": "Share of hunt slots (0–1)."},
+          "seniority_band": {"type": "string"},
+          "stretch_policy": {"type": "string"},
+          "title_synonyms": {"type": "array", "items": {"type": "string"}},
+          "queries": {"type": "object", "description": "Per-language search queries, keyed by ISO 639-1 code.", "additionalProperties": {"type": "array", "items": {"type": "string"}}},
+          "must_signals": {"type": "array", "items": {"type": "string"}},
+          "reject_signals": {"type": "array", "items": {"type": "string"}},
+          "positioning_cluster": {"type": "string"},
+          "experiment": {"type": "boolean"},
+          "tranche_cap": {"type": "integer"}
+        },
+        "required": ["cluster", "rank"]
+      }
+    },
+    "calibration": {
+      "type": "object",
+      "description": "/optimise-owned block: observed response evidence behind threshold choices. Runs never edit this; /optimise proposes, the user approves."
+    }
+  },
+  "required": ["targets"]
+}
