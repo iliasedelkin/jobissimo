@@ -1,0 +1,12 @@
+# Fixture config — Sam Rivera (fictional).
+pack: product
+identity:
+  name: Sam Rivera
+  years_experience: 4
+mail:
+  account: sam.rivera.pipeline@example.com
+thresholds:
+  ats_min_score: 75
+  shortlist_depth_cap: 25
+  adaptive_fit_bar: 4.0
+  velocity_sla_days: 5

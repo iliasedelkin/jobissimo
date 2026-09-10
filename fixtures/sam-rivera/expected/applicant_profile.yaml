@@ -1,0 +1,41 @@
+# Fixture applicant profile — Sam Rivera (fictional).
+identity:
+  full_name: Sam Rivera
+  first_name: Sam
+  last_name: Rivera
+  email: sam.rivera@example.com
+  phone: "+1 555 0134"
+  location_city: Milan
+  location_country: Italy
+  date_of_birth: "1994-03-12"
+
+links:
+  linkedin: https://www.linkedin.com/in/sam-rivera-example
+  github: https://github.com/sam-rivera-example
+  portfolio: null
+
+languages:
+  - {language: English, level: native}
+  - {language: Italian, level: B2}
+  - {language: Spanish, level: B1}
+
+work_authorization:
+  work_permit: {value: "EU work authorization (fixture)", confirm: false}
+  needs_visa_sponsorship: {value: false, confirm: false}
+  citizenship: {value: "United States (fixture)", confirm: false}
+  residence_permit: {value: "permesso di soggiorno (fixture)", confirm: false}
+
+logistics:
+  notice_period: {value: "4 weeks", confirm: false}
+  earliest_start: {value: "1 month", confirm: false}
+  salary_expectation: {value: "EUR 55000 (fixture)", confirm: true}
+  willing_to_relocate: {value: "no", confirm: false}
+  remote_ok: true
+
+defaults:
+  referral_source: "Job board"
+  cover_letter_upload: cover_letter.docx
+  cv_upload: cv.docx
+
+eeo:
+  policy: "Prefer not to say, unless the user instructs otherwise per question."

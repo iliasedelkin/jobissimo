@@ -1,0 +1,16 @@
+# Fixture targets — Sam Rivera (fictional).
+geography:
+  base_city: Milan
+  base_country: Italy
+  onsite_ok_regions: [Italy]
+  remote_ok: true
+  relocation: "no"
+seniority:
+  baseline_years: 4
+  stretch_down_cap_in_flight: 2
+company_preferences:
+  preferred_stages: [Series A, Series B, scale-up]
+  avoid: [PMO-driven enterprise, non-digital]
+targets:
+  - {cluster: PM, rank: 1, hunt_share: 0.6, seniority_band: mid, stretch_policy: none}
+  - {cluster: PO, rank: 2, hunt_share: 0.4, seniority_band: mid, stretch_policy: none}

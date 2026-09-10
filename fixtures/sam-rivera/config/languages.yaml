@@ -1,0 +1,9 @@
+# Fixture languages — Sam Rivera (fictional).
+languages:
+  en:
+    proficiency: native
+    primary: true
+    markets: [remote-EU]
+  it:
+    proficiency: B2
+    markets: [Italy]

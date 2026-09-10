@@ -1,0 +1,18 @@
+Dear Hiring team,
+
+I run product at Fernwood Labs, where I own our onboarding and reporting
+surfaces. The work I am proudest of started as a support problem: our
+customers could not find their own usage data, so I interviewed twenty-five
+of them, cut the reporting flow down to what they actually asked for, and
+shipped a self-serve module that our enterprise accounts now use every week.
+
+Before product I was an operations analyst, and before that I led a support
+team, which is why I default to the ticket queue and the funnel numbers
+before I default to opinions.
+
+I would love to talk about the product analyst opening. I am based in Milan
+and work comfortably across remote teams in English and Italian.
+
+Best,
+Sam Rivera
+sam.rivera@example.com
