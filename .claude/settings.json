@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 scripts/db.py *)",
+      "Bash(python3 scripts/audit.py *)",
+      "Bash(python3 scripts/ats_score.py *)",
+      "Bash(python3 scripts/export.py *)",
+      "Bash(python3 scripts/paths.py *)",
+      "Bash(python3 scripts/packs.py *)",
+      "Bash(python3 scripts/intake.py *)",
+      "Bash(python3 scripts/competency_map.py *)",
+      "Bash(python3 scripts/coverage.py *)",
+      "Bash(python3 scripts/setup_check.py *)",
+      "Bash(python3 scripts/scrub_check.py *)",
+      "Bash(date *)",
+      "Bash(pandoc -v)"
+    ]
+  }
+}

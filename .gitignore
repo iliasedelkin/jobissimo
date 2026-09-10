@@ -1,0 +1,19 @@
+# OS / editor
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Machine-specific Claude Code permissions
+.claude/settings.local.json
+
+# ---------------------------------------------------------------------------
+# PERSONAL DATA — the one rule that matters.
+# Everything personal lives under profile/ (the $JOBISSIMO_HOME workspace) and
+# config/ (this install's identity and targets). Both are gitignored entirely;
+# only the *.example.yaml templates in config/ are committed.
+# ---------------------------------------------------------------------------
+/profile/
+/config/*.yaml
+!/config/*.example.yaml
