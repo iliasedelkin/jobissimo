@@ -249,13 +249,26 @@ def company_stopwords(jd_text: str) -> set:
     return {w for w in re.findall(r"[a-z0-9]+", m.group(1).lower()) if len(w) > 2}
 
 
+def geo_stopwords() -> set:
+    """The candidate's own city is JD boilerplate on location-heavy postings,
+    never a skill — strip it before extraction. Read from config/targets.yaml
+    geography so this is de-personalised: the private engine hardcoded a single
+    city token here, which both leaked personal data and was wrong for any
+    other user. City only (not country/region), to match the private engine's
+    single-token behaviour."""
+    city = (packs.load_config("targets").get("geography") or {}).get("base_city")
+    if not city:
+        return set()
+    return {w for w in re.findall(r"[a-z0-9]+", str(city).lower()) if len(w) > 2}
+
+
 def extract_jd_keywords(jd_text, taxonomy, synonyms, hard_cap=45, soft_cap=12):
     """Extract the JD's salient keywords FROM the posting (freq>=2 uni/bigrams,
     boilerplate removed), normalise via synonyms, classify hard/soft via the
     taxonomy lexicon, and union in any taxonomy terms present in the JD. Returns
     (hard_terms, soft_terms) bounded by salience. Replaces the old taxonomy∩JD
     candidate set, which was blind to domain vocabulary the taxonomy never listed."""
-    stop = EXTRACT_STOP | company_stopwords(jd_text)
+    stop = EXTRACT_STOP | company_stopwords(jd_text) | geo_stopwords()
     toks = re.findall(r"[a-z][a-z0-9+#.]*", jd_text.lower())
     uni, bi = Counter(), Counter()
     for i, t in enumerate(toks):

@@ -97,6 +97,35 @@ preserve current behaviour, parameterise the personal value, record it here.
   The test file assembles its planted-leak strings at runtime so the test
   source itself passes `scrub_check --all`.
 
+## Migration parity finding (post-cutover)
+
+Running the ATS parity gate over a migrated workspace (~90 real prepared
+folders) showed ±1–2 drift vs the recorded `ats_report.md` scores, not the
+bit-identical result the gate ideally wants. Investigated to root cause:
+
+- **Dominant cause — scorer evolution, not the port.** The recorded reports
+  were written at prepare-time by whatever scorer version was live that day,
+  and the private scorer's keyword-extraction stopword list grew over the
+  campaign to filter portal boilerplate. Old reports literally list `job`,
+  `full`, `job description` as extracted "hard skills" — tokens the *current*
+  stopword list (private and OSS alike) removes. Re-scoring old apps with any
+  current engine differs from those reports; the current private engine would
+  differ too. The recorded snapshots are a mixture of scorer versions, not a
+  single consistent baseline — so vs-recorded parity is the wrong pass/fail
+  gate for judging the port.
+- **One genuine port change, and it is a fix.** The private
+  `ats_score.py` hardcoded a single city token (`"milan"`) in `EXTRACT_STOP` —
+  personal data in the engine, and the wrong city for most users. The
+  OSS engine replaces it with `geo_stopwords()`, reading `base_city` from
+  `config/targets.yaml` (city only, to match the private single-token
+  behaviour). This both de-personalises and corrects the leak.
+
+Conclusion: the port is faithful; the drift is understood and benign (a CV at
+62 vs 63 is substantively identical, and no divergence reflects a real quality
+change). Guidance for migrators: treat vs-recorded parity as a smoke test for
+gross regressions, not a bit-identity gate, and re-baseline on the current
+engine after cutover.
+
 ## Deferred improvements (behaviour left as-is on purpose)
 
 - `coverage.py`'s profile strength score is deliberately blunt (movement, not
