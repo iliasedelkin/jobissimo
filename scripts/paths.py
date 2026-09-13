@@ -18,20 +18,63 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# A desktop-launched agent session does not reliably inherit a shell profile's
+# exports, so the workspace location cannot depend on $JOBISSIMO_HOME surviving
+# into every shell. This gitignored one-line pointer file, written by
+# `/sync init`, records the absolute workspace path for those sessions. A
+# workspace that silently resolved back to an empty <repo>/profile is how
+# someone starts a second, divergent pipeline without noticing.
+POINTER_FILE = REPO_ROOT / ".jobissimo"
+
+
+def _read_pointer() -> Path | None:
+    if not POINTER_FILE.exists():
+        return None
+    for line in POINTER_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            return Path(line).expanduser().resolve()
+    return None
+
+
+def home_with_source() -> tuple[Path, str]:
+    """Resolve the workspace root and report which rule won:
+    $JOBISSIMO_HOME (highest) → .jobissimo pointer → <repo>/profile (default)."""
+    env = os.environ.get("JOBISSIMO_HOME")
+    if env:
+        return Path(env).expanduser().resolve(), "JOBISSIMO_HOME env"
+    ptr = _read_pointer()
+    if ptr is not None:
+        return ptr, ".jobissimo pointer"
+    return REPO_ROOT / "profile", "default <repo>/profile"
+
 
 def home() -> Path:
-    """The workspace root ($JOBISSIMO_HOME, default <repo>/profile)."""
-    env = os.environ.get("JOBISSIMO_HOME")
-    return Path(env).expanduser().resolve() if env else REPO_ROOT / "profile"
+    """The workspace root: $JOBISSIMO_HOME, else the .jobissimo pointer, else
+    <repo>/profile."""
+    return home_with_source()[0]
 
 
 # --- engine side (committed) -------------------------------------------------
 
-def config_dir() -> Path:
-    """$JOBISSIMO_CONFIG overrides the repo config dir — used by the test
-    suite and by parity runs against a copied workspace."""
+def config_dir_with_source() -> tuple[Path, str]:
+    """Resolve the config dir and report which rule won. Config is per-install
+    personal data and travels with the workspace, so the workspace copy wins
+    over the legacy repo dir:
+    $JOBISSIMO_CONFIG (highest) → <workspace>/config → <repo>/config (legacy)."""
     env = os.environ.get("JOBISSIMO_CONFIG")
-    return Path(env).expanduser().resolve() if env else REPO_ROOT / "config"
+    if env:
+        return Path(env).expanduser().resolve(), "JOBISSIMO_CONFIG env"
+    ws = home() / "config"
+    if ws.exists():
+        return ws, "workspace/config"
+    return REPO_ROOT / "config", "legacy <repo>/config"
+
+
+def config_dir() -> Path:
+    """$JOBISSIMO_CONFIG, else <workspace>/config when present, else the legacy
+    <repo>/config. Config is personal data and travels with the workspace."""
+    return config_dir_with_source()[0]
 
 
 def packs_dir() -> Path:
@@ -107,8 +150,11 @@ def resolve_folder(value: str) -> Path:
 
 def main() -> int:
     argparse.ArgumentParser(description=__doc__.splitlines()[0]).parse_args()
+    ws, ws_src = home_with_source()
+    cfg, cfg_src = config_dir_with_source()
     print(f"repo:            {REPO_ROOT}")
-    print(f"JOBISSIMO_HOME:  {home()}" + ("" if os.environ.get("JOBISSIMO_HOME") else "  (default)"))
+    print(f"workspace:       {ws}  (from {ws_src})")
+    print(f"config:          {cfg}  (from {cfg_src})")
     for name, fn in (("state db", state_db), ("knowledge", knowledge),
                      ("positioning", positioning), ("jd_texts", jd_texts),
                      ("applications", applications), ("runs", runs),

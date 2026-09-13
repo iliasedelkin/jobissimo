@@ -130,10 +130,12 @@ def load_yaml(path: Path) -> dict:
 # --------------------------------------------------------------- layering
 
 def load_config(name: str) -> dict:
-    """Load config/<name>.yaml, falling back to config/<name>.example.yaml
-    (the shipped defaults) when the install has not configured it yet."""
+    """Load <config_dir>/<name>.yaml, falling back to the shipped template
+    templates/config/<name>.example.yaml when the install has not configured it
+    yet. The real file travels with the workspace (resolved via config_dir());
+    the example is engine-committed and stays in templates/."""
     real = paths.config_dir() / f"{name}.yaml"
-    example = paths.config_dir() / f"{name}.example.yaml"
+    example = paths.templates_dir() / "config" / f"{name}.example.yaml"
     return load_yaml(real if real.exists() else example)
 
 

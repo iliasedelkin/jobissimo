@@ -8,11 +8,15 @@ __pycache__/
 # Machine-specific Claude Code permissions
 .claude/settings.local.json
 
+# Workspace pointer — a one-line file holding this machine's absolute
+# $JOBISSIMO_HOME path, written by `/sync init`. Per-machine, never committed.
+.jobissimo
+
 # ---------------------------------------------------------------------------
 # PERSONAL DATA — the one rule that matters.
 # Everything personal lives under profile/ (the $JOBISSIMO_HOME workspace) and
 # config/ (this install's identity and targets). Both are gitignored entirely;
-# only the *.example.yaml templates in config/ are committed.
+# the shipped *.example.yaml templates live in templates/config/ (committed).
 # ---------------------------------------------------------------------------
 /profile/
 /config/*.yaml
