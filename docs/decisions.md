@@ -152,6 +152,36 @@ Deltas from the sync brief's §0 snapshot, verified before starting:
   lossless format (no `id_reservations`/`meta`, unordered). Refreshed by the new
   `export-csv` during the Part 2 round-trip.
 
+Part 2 retrofit of this machine (done):
+
+- **Placement: relocated.** The workspace moved from `<repo>/profile` to
+  `~/Documents/Job/jobissimo-workspace` with a `.jobissimo` pointer, on the
+  `git clean -xfd` hazard grounds in the brief. Config moved into
+  `<workspace>/config/`.
+- **First commit was 1932 files / 12.6 MB**, not the brief's ~900 / ~18 MB
+  estimate: the count is higher because 1402 application artefacts are
+  committed, and the size lower because the 938 KB `.db` is excluded.
+- **Workspace commits are unsigned** (`commit.gpgsign=false` on the workspace
+  repo). The machine's global config signs via an SSH key that needs a
+  passphrase, which fails non-interactively (it is what hung an abandoned
+  commit for ~2 days). The engine repo already sets `gpgsign=false` locally;
+  the workspace matches so `/sync push` stays non-interactive. A user who wants
+  signed workspace commits can flip it and keep their key unlocked.
+- **`gh repo create --push` half-completed** (a transient GitHub GraphQL error):
+  the private repo was created (confirmed `isPrivate: true`) but the remote and
+  push were done manually afterwards. No data impact.
+- **Round-trip verified**: `verify-csv` byte-clean; a rebuilt-from-CSV copy and
+  a fresh two-repo clone both reproduce the live funnel exactly (333 jobs,
+  identical per-status counts, `events_seq` 2853). `db.py stats` matches
+  field-for-field except the **per-source list order**: equal-count sources
+  tie-break by row-insertion order, which differs after a rebuild (rows are
+  inserted ordered by `job_id`). Cosmetic, not data loss; deferred.
+- **Backup** at `~/Documents/Job/_jobissimo-backup-20260912-2236` (verified
+  1928 files, DB 333 jobs) is kept until the user says otherwise.
+- Minor: `sync.py init --dry-run` initialises the repo and refreshes the CSV
+  export as part of preparing the preview; it only skips the commit. Deferred
+  polish — make the preview fully side-effect-free.
+
 ## Deferred improvements (behaviour left as-is on purpose)
 
 - `coverage.py`'s profile strength score is deliberately blunt (movement, not
