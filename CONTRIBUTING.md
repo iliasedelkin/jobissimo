@@ -64,6 +64,18 @@ Verifying a stub for a market you know is a great first contribution:
   a regression, not an improvement.
 - **Docs.**
 
+## Public change, private evidence
+
+Your workspace is a separate private repo (`/sync`, see `docs/sync.md`); only
+engine and pack changes belong in a public PR. The subtle case is a pack
+improvement *learned from* private data — e.g. an `/optimise` run noticing that
+Italian postings keep using a term the lexicon lacks. **The change is public;
+the evidence is not.** Contribute the pack diff with aggregate justification
+only ("14 postings across 3 months, 0 matched the lexicon"); the full evidence,
+with company names and job ids, stays in your workspace's `reports/`. Never put
+a company name tied to an outcome, a job id, or any personal token in a public
+diff or commit message.
+
 ## Ground rules
 
 - **No personal data in PRs — including in test fixtures.** Fixtures are

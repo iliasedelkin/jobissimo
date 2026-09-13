@@ -89,6 +89,12 @@ validated by db.py; `closed` takes an `outcome`
    skills-inventory names stay canonical English; internal artifacts stay
    English. Translation never changes a fact, and never exceeds the register
    the user declared in `config/languages.yaml`.
+10. **Workspace state travels as CSV; the database is a local artefact.**
+    `state/pipeline.db` is never committed — `db.py export-csv` writes the
+    diff-friendly CSV record (jobs/events/id_reservations/meta + manifest) that
+    is, and `db.py import-csv` rebuilds the DB. `/sync` is the only thing that
+    commits or moves the workspace; no pipeline command syncs on its own, and
+    divergent pipeline state is never auto-merged (show both sides, user picks).
 
 ## The four-layer config model
 
@@ -98,10 +104,13 @@ Resolution order, last wins. A layer is only written by its owner.
 |---|---|---|---|
 | Engine | scripts, command files, `engine/rules/`, schemas | maintainers | yes |
 | Pack | role clusters, ATS lexicons, board catalogue, locale conventions, evaluation rubric | community PR | yes |
-| Config | this install's identity, targets, languages, boards, capabilities | `/setup`, `/optimise` (with approval) | **no** |
-| Profile | knowledge, positioning, and every generated artefact | the user and the pipeline | **no** |
+| Config | this install's identity, targets, languages, boards, capabilities | `/setup`, `/optimise` (with approval) | **no** — user's private repo |
+| Profile | knowledge, positioning, and every generated artefact | the user and the pipeline | **no** — user's private repo |
 
-A pack is never edited in place; a user override lands in `config/`.
+A pack is never edited in place; a user override lands in `config/`. Config and
+Profile live in the workspace (`$JOBISSIMO_HOME`, which contains `config/`) and
+are versioned via `/sync` in the user's own private repo, never this public one;
+the shipped config templates live in `templates/config/` (see `docs/sync.md`).
 
 ## Directory map
 
@@ -113,10 +122,10 @@ A pack is never edited in place; a user override lands in `config/`.
 | `engine/schemas/` | JSON Schema for the config files |
 | `packs/product/` | The reference domain pack (roles, evaluation, ATS lexicons, boards, en/it locales verified + de/fr/es/nl/pt stubs) |
 | `packs/generic/` | Minimal fallback; taxonomy generated at setup |
-| `scripts/` | db.py, audit.py, ats_score.py, export.py, paths.py, packs.py, intake.py, competency_map.py, coverage.py, setup_check.py, scrub_check.py, migrate.py (all have `--help`) |
-| `templates/` | ats_reference.docx (clean metadata) + knowledge scaffolds |
-| `config/` | GITIGNORED except `*.example.yaml` — identity, targets, languages, boards, capabilities |
-| `profile/` | GITIGNORED ENTIRELY — `$JOBISSIMO_HOME`: `_intake/`, `knowledge/`, `positioning/`, `competency_map.md`, `applicant_profile.yaml`, `setup_state.yaml`, `jd_texts/`, `applications/`, `runs/`, `reports/`, `state/pipeline.db` |
+| `scripts/` | db.py, audit.py, ats_score.py, export.py, paths.py, packs.py, sync.py, intake.py, competency_map.py, coverage.py, setup_check.py, scrub_check.py, migrate.py (all have `--help`) |
+| `templates/` | ats_reference.docx (clean metadata), knowledge scaffolds, `config/*.example.yaml` (shipped config templates), `workspace.gitignore` (written by `/sync init`) |
+| `config/` (workspace) | GITIGNORED ENTIRELY — identity, targets, languages, boards, capabilities; lives in `$JOBISSIMO_HOME`, resolved via `$JOBISSIMO_CONFIG` → `<workspace>/config` → legacy `<repo>/config` |
+| `profile/` | GITIGNORED ENTIRELY — `$JOBISSIMO_HOME` (resolved via `$JOBISSIMO_HOME` → `.jobissimo` pointer → default): `config/`, `_intake/`, `knowledge/`, `positioning/`, `competency_map.md`, `applicant_profile.yaml`, `setup_state.yaml`, `jd_texts/`, `applications/`, `runs/`, `reports/`, `state/pipeline.db` (+ `state/backup/*.csv`, the committed record) |
 | `fixtures/`, `tests/` | Synthetic candidate (Sam Rivera) + JDs; offline test suite |
 
 ## Scripts

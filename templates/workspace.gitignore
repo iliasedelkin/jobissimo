@@ -1,0 +1,27 @@
+# Workspace .gitignore — written by `/sync init` into $JOBISSIMO_HOME.
+# The workspace is your OWN private git repo. Everything here is committed and
+# synced EXCEPT the few runtime/machine-specific artefacts below.
+
+# The database is a runtime artefact, rebuilt from state/backup/*.csv by
+# `db.py import-csv`. Never commit the binary DB — it changes every run and
+# cannot be merged; the CSVs are the record of record.
+state/*.db
+state/*.db-journal
+state/*.db-wal
+state/*.db-shm
+state/*.db.bak.*
+
+# Machine-specific: capabilities are re-detected per machine by /doctor
+# (the laptop has a browser adapter, the server may not).
+config/capabilities.yaml
+config/local/
+
+# Transient
+runs/.hunt_lock/
+.DS_Store
+
+# Everything else IS committed — including the exported .docx/.pdf in
+# applications/. Each is written once and never modified, so git stores them
+# efficiently, and for a submitted application the exact file sent is worth
+# keeping. To slim the repo you may ignore artefacts for jobs that never
+# reached `applied` — export.py regenerates them from the committed *_final.md.

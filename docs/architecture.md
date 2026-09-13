@@ -16,15 +16,20 @@ Resolution order, last wins. A layer is only written by its owner.
 |---|---|---|---|
 | **Engine** | `scripts/`, `.claude/commands/`, `engine/rules/`, `engine/schemas/` | maintainers | yes |
 | **Pack** | `packs/<name>/` — role clusters, ATS lexicons, board catalogue, locale conventions, evaluation rubric | community PR | yes |
-| **Config** | `config/` — this install's identity, targets, languages, boards, capabilities | `/setup`, `/optimise` (approved) | **no** |
-| **Profile** | `$JOBISSIMO_HOME` — knowledge, positioning, every generated artefact | the user and the pipeline | **no** |
+| **Config** | `$JOBISSIMO_HOME/config/` — this install's identity, targets, languages, boards, capabilities | `/setup`, `/optimise` (approved) | **no** — private repo |
+| **Profile** | `$JOBISSIMO_HOME` — knowledge, positioning, every generated artefact | the user and the pipeline | **no** — private repo |
 
 Why it matters: the personal-data rule becomes mechanical. Everything private
-lives under two gitignored roots (`config/` and `profile/`), and
-`scripts/paths.py` resolves `$JOBISSIMO_HOME` (default `./profile`) so every
-script and command goes through one place. Multiple workspaces become free,
-which is how the migration parity check runs against a copy of a real
-workspace without touching live data (`$JOBISSIMO_HOME=/copy …`).
+lives under the one gitignored workspace root (`$JOBISSIMO_HOME`, which holds
+both `config/` and the profile data), and `scripts/paths.py` resolves it — from
+`$JOBISSIMO_HOME`, else a gitignored `.jobissimo` pointer, else the default
+`./profile` — so every script and command goes through one place. Config
+resolves the same way (`$JOBISSIMO_CONFIG`, else `<workspace>/config`, else the
+legacy `<repo>/config`); the shipped templates live in `templates/config/`.
+Config and Profile are versioned in the user's **own private repo** via
+`/sync`, never in this public one — see [sync.md](sync.md). Multiple workspaces
+become free, which is how the migration parity check runs against a copy of a
+real workspace without touching live data (`$JOBISSIMO_HOME=/copy …`).
 
 `scripts/packs.py` implements the layering: it reads the active pack plus the
 config overrides, using a small stdlib YAML subset parser (no PyYAML
@@ -36,9 +41,10 @@ imported from another install never fails validation on a historical value.
 
 | Script | Role |
 |---|---|
-| `paths.py` | Resolves `$JOBISSIMO_HOME` / `$JOBISSIMO_CONFIG`; every path goes through it |
+| `paths.py` | Resolves the workspace (`$JOBISSIMO_HOME` → `.jobissimo` pointer → default) and config (`$JOBISSIMO_CONFIG` → `<workspace>/config` → legacy); every path goes through it |
 | `packs.py` | Pack loader + config layering (the mini-YAML reader) |
-| `db.py` | The only write path to `state/pipeline.db`; enums + transition matrix |
+| `db.py` | The only write path to `state/pipeline.db`; enums + transition matrix; lossless `export-csv`/`import-csv`/`verify-csv` (the DB is a rebuildable artefact) |
+| `sync.py` | The workspace↔private-repo sync helper behind `/sync` (status/init/pull/push) |
 | `audit.py` | The truth audit (hard gate); also `--library` mode for positioning at birth |
 | `ats_score.py` | Deterministic 0–100 hybrid scorer |
 | `export.py` | Trace-strip → pandoc DOCX/PDF (audits first) |

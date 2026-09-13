@@ -55,6 +55,12 @@ candidate has not expressed.
 
 ## Setup
 
+**Sync freshness (warn only, never block).** Run `python3 scripts/sync.py
+status` once at the start; if the DB and CSVs are out of sync, a remote is
+ahead, or the last write came from another machine, surface a one-line warning
+and suggest `/sync pull`, then proceed. `/prepare` never pulls, pushes, or
+blocks on sync state — only `/sync` touches a remote.
+
 ```bash
 RUN_ID="$(date +%Y%m%d_%H%M%S)_prepare"
 python3 scripts/db.py log --run-id $RUN_ID --command prepare --action run_start \

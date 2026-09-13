@@ -131,11 +131,23 @@ engine — and never applies anything without your approval. See
 
 ## Configuration
 
-Everything specific to you lives in `config/` (identity, targets, languages,
-boards, capabilities) and `profile/` (knowledge, positioning, artefacts).
-**Both are gitignored**; only the `*.example.yaml` templates are committed.
-`/doctor` explains where any config value came from — which setup stage wrote
-it, from what evidence, when.
+Everything specific to you lives in your workspace (`$JOBISSIMO_HOME`):
+identity, targets, languages, boards, and capabilities in `config/`, and
+knowledge, positioning, and artefacts alongside them. **It is all gitignored by
+this public repo**; the shipped `*.example.yaml` templates live in
+`templates/config/`. `/doctor` explains where any config value came from —
+which setup stage wrote it, from what evidence, when.
+
+## Sync and backup
+
+Because the workspace is gitignored, it is also unbacked-up by default. `/sync`
+makes it **its own private git repo** with a private remote, entirely separate
+from this public one, so you can version it and move it between machines
+without any risk of personal data reaching the public repo. The pipeline
+database is treated as a runtime artefact: `db.py export-csv` commits a
+diff-friendly CSV record, `db.py import-csv` rebuilds the DB on the other
+machine. Engine changes still flow here as ordinary commits. See
+[docs/sync.md](docs/sync.md).
 
 ## Languages
 

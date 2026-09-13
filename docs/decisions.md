@@ -126,6 +126,32 @@ change). Guidance for migrators: treat vs-recorded parity as a smoke test for
 gross regressions, not a bit-identity gate, and re-baseline on the current
 engine after cutover.
 
+## Workspace sync (2026-09) — engine + retrofit
+
+Added the two-repository sync mechanism (`docs/sync.md`): the workspace becomes
+the user's own private git repo; the DB is a rebuildable artefact and its CSV
+export is the committed record of record. Engine work: `paths.py` config +
+`.jobissimo` pointer resolution; `db.py` lossless `export/import/verify-csv` +
+`meta` write-stamps; `scripts/sync.py` + `/sync`; config examples moved to
+`templates/config/`.
+
+Deltas from the sync brief's §0 snapshot, verified before starting:
+
+- **Job count is 333, not 317.** The brief's number was stale; the pipeline
+  grew between writing and execution. Round-trip parity was checked against the
+  live 333/1800/3 (jobs/events/id_reservations).
+- **Local `main` was 1 commit ahead of `origin/main`** (the `fix(ats)` commit
+  was unpushed). That commit — and *only* that commit — carried the user's
+  home-city token (a denylisted string) in `docs/decisions.md`. It was
+  therefore **never public** (origin's HEAD `f7b5f77` is clean). It was
+  rewritten (`filter-branch`, one idempotent text substitution) to `bd1ca94`
+  before any push, so no public history was rewritten; the working-tree copy
+  was de-personalised in the same pass. The scrub gate / CI history scan is now
+  clean.
+- **The `state/backup/*.csv` were stale** relative to the DB and predate the new
+  lossless format (no `id_reservations`/`meta`, unordered). Refreshed by the new
+  `export-csv` during the Part 2 round-trip.
+
 ## Deferred improvements (behaviour left as-is on purpose)
 
 - `coverage.py`'s profile strength score is deliberately blunt (movement, not

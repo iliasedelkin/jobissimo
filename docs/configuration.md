@@ -1,8 +1,11 @@
 # Configuration
 
-Everything specific to an install lives in two gitignored places: `config/`
-(this install's settings) and `$JOBISSIMO_HOME` / `profile/` (the knowledge
-base and every generated artefact). Only `config/*.example.yaml` is committed.
+Everything specific to an install lives in the gitignored workspace
+(`$JOBISSIMO_HOME`, default `./profile`): `config/` (this install's settings)
+and the knowledge base and every generated artefact alongside it. None of it is
+committed to this public repo; the shipped config templates live in
+`templates/config/`, and the workspace is versioned in the user's own private
+repo via `/sync` (see [sync.md](sync.md)).
 
 `/setup` writes all of these; you can also edit them by hand. `/doctor`
 validates them and explains where any value came from.
@@ -17,10 +20,10 @@ validates them and explains where any value came from.
 | `boards.yaml` | `engine/schemas/boards.schema.json` | this install's tiered board list + ROI ledger |
 | `capabilities.yaml` | — | detected tools + chosen adapters (browse/mail/export) |
 
-Copy an example to drop the `.example` suffix, or run `/setup`:
+Copy a shipped template into your workspace config dir, or run `/setup`:
 
 ```sh
-cp config/pipeline.example.yaml config/pipeline.yaml   # then edit, or let /setup fill it
+cp templates/config/pipeline.example.yaml "$JOBISSIMO_HOME/config/pipeline.yaml"  # then edit, or let /setup fill it
 ```
 
 ## $JOBISSIMO_HOME (the workspace)

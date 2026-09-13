@@ -12,6 +12,14 @@ supplies URLs and everything below still applies. All paths below are
 workspace-relative (`$JOBISSIMO_HOME`, default `./profile` — see
 `scripts/paths.py`).
 
+## Sync freshness (warn only, never block)
+
+At the very start, run `python3 scripts/sync.py status` once. If it reports the
+DB and CSVs out of sync, a remote ahead, or that the last write came from
+another machine, **surface a one-line warning** and suggest `/sync pull` — then
+proceed regardless. `/hunt` never pulls, pushes, or blocks on sync state; only
+`/sync` touches a remote.
+
 ## Parameters (defaults)
 
 - `target_count` – qualifying postings to collect (default **10**)
