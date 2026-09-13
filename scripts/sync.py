@@ -295,15 +295,25 @@ def cmd_push(args) -> int:
         return 1
 
     # 3. Commit the workspace with a message derived from what happened.
+    # A failed commit must never read as success: the changes stay staged and
+    # the workspace push is skipped, so a green run always means committed.
     print("3/5 commit workspace")
+    workspace_committed = True
     if is_git_repo(WORKSPACE) and porcelain(WORKSPACE):
         last_commit_ts = git(WORKSPACE, "log", "-1", "--format=%cI").stdout.strip() or None
         summary = events_summary_since(last_commit_ts)
         today = datetime.now(timezone.utc).date().isoformat()
         msg = f"sync {today}: {summary}" if summary else f"sync {today}: workspace snapshot"
         git(WORKSPACE, "add", "-A")
-        git(WORKSPACE, "commit", "-q", "-m", msg)
-        print(f"    workspace: {msg}")
+        commit = git(WORKSPACE, "commit", "-q", "-m", msg)
+        if commit.returncode != 0:
+            workspace_committed = False
+            print("    workspace: COMMIT FAILED - changes remain staged, nothing pushed.",
+                  file=sys.stderr)
+            for line in (commit.stderr or commit.stdout).strip().splitlines():
+                print(f"        {line}", file=sys.stderr)
+        else:
+            print(f"    workspace: {msg}")
     else:
         print("    workspace: nothing to commit")
 
@@ -317,16 +327,31 @@ def cmd_push(args) -> int:
     else:
         print("    engine: clean")
 
-    # 5. Push both.
+    # 5. Push both. Read HEAD before pushing so the reported sha is the one
+    # actually sent, and skip a repo with nothing to push so an unrelated
+    # credential error cannot masquerade as a failed sync.
+    failures = 0
     print("5/5 push")
     for label, repo in (("workspace", WORKSPACE), ("engine", ENGINE)):
+        if label == "workspace" and not workspace_committed:
+            print("    workspace: skipped - commit failed above")
+            failures += 1
+            continue
         if not is_git_repo(repo) or not has_remote(repo):
             print(f"    {label}: no remote — skipped")
             continue
-        r = git(repo, "push")
+        ab = ahead_behind(repo)
+        if ab is not None and ab[0] == 0:
+            print(f"    {label}: up to date — nothing to push")
+            continue
         head = git(repo, "rev-parse", "--short", "HEAD").stdout.strip()
-        print(f"    {label}: {'pushed ' + head if r.returncode == 0 else 'push FAILED: ' + r.stderr.strip()}")
-    return 0
+        r = git(repo, "push")
+        if r.returncode == 0:
+            print(f"    {label}: pushed {head}")
+        else:
+            failures += 1
+            print(f"    {label}: push FAILED: {r.stderr.strip()}", file=sys.stderr)
+    return 1 if failures else 0
 
 
 def build_parser() -> argparse.ArgumentParser:
