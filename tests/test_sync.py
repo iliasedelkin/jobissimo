@@ -183,5 +183,71 @@ class TestPushGate(unittest.TestCase):
         self.assertEqual(sync.cmd_push(object()), 1)
 
 
+class TestPushCommitFailure(unittest.TestCase):
+    """A commit that fails must not report success and must not be pushed.
+
+    Regression: cmd_push ignored `git commit`'s return code and printed the
+    message regardless, then step 5 read HEAD *after* pushing, so a failed
+    commit followed by a no-op push printed the previous commit's sha and read
+    as a clean sync. Reproduced here the way it happens in the wild: a repo
+    configured to sign with a key that does not exist."""
+
+    def setUp(self):
+        import subprocess
+        self.tmp = tempfile.TemporaryDirectory()
+        self.ws = Path(self.tmp.name) / "ws"
+        self.ws.mkdir()
+        for args in (["init", "-q", "-b", "main"],
+                     ["config", "user.name", "T"],
+                     ["config", "user.email", "t@example.com"],
+                     ["config", "commit.gpgsign", "false"]):
+            subprocess.run(["git", "-C", str(self.ws), *args], check=True,
+                           capture_output=True)
+        (self.ws / "seed.txt").write_text("seed\n")
+        subprocess.run(["git", "-C", str(self.ws), "add", "-A"], check=True,
+                       capture_output=True)
+        subprocess.run(["git", "-C", str(self.ws), "commit", "-q", "-m", "seed"],
+                       check=True, capture_output=True)
+        self.head_before = subprocess.run(
+            ["git", "-C", str(self.ws), "rev-parse", "HEAD"],
+            capture_output=True, text=True).stdout.strip()
+
+        self._save = (sync.WORKSPACE, sync.ENGINE, sync.run_db, sync.SCRUB_CLI)
+        sync.WORKSPACE = self.ws
+        sync.ENGINE = Path(self.tmp.name) / "engine-not-a-repo"
+        sync.ENGINE.mkdir()
+        sync.run_db = lambda *a: subprocess.CompletedProcess(a, 0, "", "")
+        sync.SCRUB_CLI = [sys.executable, "-c", "pass"]
+
+    def tearDown(self):
+        sync.WORKSPACE, sync.ENGINE, sync.run_db, sync.SCRUB_CLI = self._save
+        self.tmp.cleanup()
+
+    def _git(self, *args):
+        import subprocess
+        return subprocess.run(["git", "-C", str(self.ws), *args],
+                              capture_output=True, text=True)
+
+    def test_failed_commit_is_reported_and_not_pushed(self):
+        # Make the next commit fail the way a missing signing key does.
+        self._git("config", "commit.gpgsign", "true")
+        self._git("config", "gpg.format", "ssh")
+        self._git("config", "user.signingkey", str(self.ws / "nonexistent.pub"))
+        (self.ws / "new.txt").write_text("change\n")
+
+        self.assertEqual(sync.cmd_push(object()), 1,
+                         "a failed workspace commit must make push exit non-zero")
+        self.assertEqual(self._git("rev-parse", "HEAD").stdout.strip(),
+                         self.head_before, "HEAD must not have moved")
+        self.assertTrue(self._git("status", "--porcelain").stdout.strip(),
+                        "the changes must remain for the user to retry")
+
+    def test_successful_commit_still_returns_zero(self):
+        (self.ws / "new.txt").write_text("change\n")
+        self.assertEqual(sync.cmd_push(object()), 0)
+        self.assertNotEqual(self._git("rev-parse", "HEAD").stdout.strip(),
+                            self.head_before, "the commit must have landed")
+
+
 if __name__ == "__main__":
     unittest.main()
