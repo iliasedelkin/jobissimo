@@ -16,8 +16,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
+import io
 import json
 import re
+import socket
 import sqlite3
 import sys
 from datetime import date, datetime, timedelta, timezone
@@ -81,6 +84,13 @@ JOB_COLUMNS = [
     "created_at", "updated_at",
 ]
 
+EVENT_COLUMNS = ["id", "ts", "run_id", "command", "job_id", "action", "detail"]
+RESERVATION_COLUMNS = ["source", "max_n"]
+META_COLUMNS = ["key", "value"]
+
+# Bump when the CSV/table shape changes so import-csv can refuse a mismatch.
+SCHEMA_VERSION = 1
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (
     job_id TEXT PRIMARY KEY,
@@ -137,6 +147,14 @@ CREATE TABLE IF NOT EXISTS events (
     action TEXT NOT NULL,
     detail TEXT
 );
+CREATE TABLE IF NOT EXISTS id_reservations (
+    source TEXT PRIMARY KEY,
+    max_n INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS meta (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_events_run ON events(run_id);
 CREATE INDEX IF NOT EXISTS idx_events_job ON events(job_id);
@@ -161,6 +179,18 @@ def connect() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=MEMORY")
     conn.executescript(SCHEMA)
     return conn
+
+
+def stamp_write(conn: sqlite3.Connection) -> None:
+    """Record which machine wrote and when, on every mutating path. `/sync`
+    reads this to warn — before a machine overwrites the committed state — that
+    the CSVs on the remote came from the OTHER machine more recently than this
+    database was written."""
+    for key, value in (("last_machine", socket.gethostname()),
+                       ("last_write_at", now_iso())):
+        conn.execute("INSERT INTO meta (key, value) VALUES (?, ?) "
+                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                     (key, value))
 
 
 def _column_values(conn: sqlite3.Connection, column: str) -> set:
@@ -289,6 +319,7 @@ def cmd_add_job(args) -> None:
          args.date_found, args.jd_path, args.jd_language, args.salary,
          args.employment_type, args.status, args.notes, ts, ts),
     )
+    stamp_write(conn)
     conn.commit()
     print(f"Added {args.job_id} ({args.company} — {args.title}) status={args.status}")
 
@@ -327,6 +358,7 @@ def cmd_score(args) -> None:
          args.rejection_reason, args.priority, args.scored_at or now_iso(),
          new_status, now_iso(), args.job_id),
     )
+    stamp_write(conn)
     conn.commit()
     print(f"Scored {args.job_id}: fit={fit} rec={args.apply_recommendation} "
           f"priority={args.priority} -> status={new_status}")
@@ -377,6 +409,7 @@ def cmd_set_status(args) -> None:
                  (*updates.values(), now_iso(), args.job_id))
     log_event(conn, run_id=args.run_id, command="set-status", job_id=args.job_id,
               action="status_change", detail=json.dumps({"from": current, "to": args.status, **{k: v for k, v in updates.items() if k != "status"}}))
+    stamp_write(conn)
     conn.commit()
     extra = {k: v for k, v in updates.items() if k != "status"}
     print(f"{args.job_id}: {current} -> {args.status}" + (f" ({extra})" if extra else ""))
@@ -430,6 +463,7 @@ def cmd_set_field(args) -> None:
     old = row[args.field]
     conn.execute(f"UPDATE jobs SET {args.field}=?, updated_at=? WHERE job_id=?",
                  (value, now_iso(), args.job_id))
+    stamp_write(conn)
     conn.commit()
     print(f"{args.job_id}.{args.field}: {old!r} -> {value!r}")
 
@@ -517,6 +551,7 @@ def cmd_next_id(args) -> None:
     conn.execute("INSERT INTO id_reservations (source, max_n) VALUES (?, ?) "
                  "ON CONFLICT(source) DO UPDATE SET max_n = excluded.max_n",
                  (args.source_slug, next_n))
+    stamp_write(conn)
     conn.execute("COMMIT")
     print(f"{args.source_slug}{next_n:03d}")
 
@@ -586,6 +621,7 @@ def cmd_log(args) -> None:
     conn = connect()
     log_event(conn, run_id=args.run_id, command=args.command_name,
               job_id=args.job_id, action=args.action, detail=args.detail)
+    stamp_write(conn)
     conn.commit()
     print(f"Logged: run={args.run_id} action={args.action}" + (f" job={args.job_id}" if args.job_id else ""))
 
@@ -881,19 +917,152 @@ def cmd_stats(args) -> None:
             print(f"- {r['job_id']} {r['company']} (applied {r['date_applied']}, due {r['follow_up_date']})")
 
 
+# The text export is the record of record: the DB is a runtime artefact,
+# rebuilt from these CSVs (see /sync). Stable table set, stable row order, and
+# stable column order so a commit diff shows only what actually changed.
+CSV_TABLES = [
+    ("jobs", JOB_COLUMNS, "job_id"),
+    ("events", EVENT_COLUMNS, "id"),
+    ("id_reservations", RESERVATION_COLUMNS, "source"),
+    ("meta", META_COLUMNS, "key"),
+]
+
+
+def _table_csv_bytes(conn: sqlite3.Connection, table: str, cols: list, order: str):
+    """Render a table to deterministic CSV bytes. Returns (bytes, row_count)."""
+    rows = conn.execute(f"SELECT * FROM {table} ORDER BY {order}").fetchall()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(cols)
+    for r in rows:
+        w.writerow([r[c] for c in cols])
+    return buf.getvalue().encode("utf-8"), len(rows)
+
+
+def _events_seq(conn: sqlite3.Connection):
+    row = conn.execute(
+        "SELECT seq FROM sqlite_sequence WHERE name='events'").fetchone()
+    return row[0] if row else None
+
+
+def _default_backup_dir() -> Path:
+    return paths.home() / "state" / "backup"
+
+
 def cmd_export_csv(args) -> None:
     conn = connect()
-    out = Path(args.out)
+    out = Path(args.out) if args.out else _default_backup_dir()
     out.mkdir(parents=True, exist_ok=True)
-    for table, cols in (("jobs", JOB_COLUMNS), ("events", ["id", "ts", "run_id", "command", "job_id", "action", "detail"])):
-        rows = conn.execute(f"SELECT * FROM {table}").fetchall()
-        path = out / f"{table}.csv"
-        with path.open("w", newline="", encoding="utf-8") as fh:
-            w = csv.writer(fh)
-            w.writerow(cols)
-            for r in rows:
-                w.writerow([r[c] for c in cols])
-        print(f"Wrote {path} ({len(rows)} rows)")
+    manifest = {
+        "schema_version": SCHEMA_VERSION,
+        "exported_at": now_iso(),
+        "machine": socket.gethostname(),
+        "events_seq": _events_seq(conn),
+        "tables": {},
+    }
+    for table, cols, order in CSV_TABLES:
+        data, n = _table_csv_bytes(conn, table, cols, order)
+        (out / f"{table}.csv").write_bytes(data)
+        manifest["tables"][table] = {"rows": n, "sha256": hashlib.sha256(data).hexdigest()}
+        print(f"Wrote {out / f'{table}.csv'} ({n} rows)")
+    (out / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"Wrote {out / 'manifest.json'} (schema v{SCHEMA_VERSION}, events_seq={manifest['events_seq']})")
+
+
+def _read_csv(path: Path):
+    """Yield rows as lists; empty string -> None (set-field '' clears to NULL,
+    so the DB never stores '' deliberately). SQLite column affinity coerces
+    numeric strings back to INTEGER/REAL on insert."""
+    with path.open("r", newline="", encoding="utf-8") as fh:
+        reader = csv.reader(fh)
+        header = next(reader, None)
+        for row in reader:
+            yield header, [None if v == "" else v for v in row]
+
+
+def cmd_import_csv(args) -> None:
+    src = Path(args.dir) if args.dir else _default_backup_dir()
+    if not src.exists():
+        raise DbError(f"CSV directory not found: {src}")
+    for table, _, _ in CSV_TABLES:
+        if table in ("jobs", "events") and not (src / f"{table}.csv").exists():
+            raise DbError(f"Missing required {table}.csv in {src}")
+    manifest = {}
+    if (src / "manifest.json").exists():
+        manifest = json.loads((src / "manifest.json").read_text(encoding="utf-8"))
+        if manifest.get("schema_version") != SCHEMA_VERSION:
+            raise DbError(f"manifest schema_version {manifest.get('schema_version')} "
+                          f"!= this build's {SCHEMA_VERSION}; refusing to import.")
+
+    # Move an existing DB aside rather than overwriting — a restore is
+    # reversible, an overwrite is not.
+    if DB_PATH.exists():
+        bak = DB_PATH.with_name(f"{DB_PATH.name}.bak.{datetime.now().strftime('%Y%m%d-%H%M%S')}")
+        DB_PATH.rename(bak)
+        print(f"Moved existing database aside: {bak}")
+
+    conn = connect()
+    total = {}
+    for table, cols, _ in CSV_TABLES:
+        path = src / f"{table}.csv"
+        if not path.exists():
+            total[table] = 0
+            continue
+        placeholders = ",".join("?" for _ in cols)
+        collist = ",".join(cols)
+        n = 0
+        for header, values in _read_csv(path):
+            if header != cols:
+                raise DbError(f"{table}.csv header {header} != expected {cols}")
+            conn.execute(f"INSERT INTO {table} ({collist}) VALUES ({placeholders})", values)
+            n += 1
+        total[table] = n
+
+    # Restore the events AUTOINCREMENT high-water mark exactly. Inserting rows
+    # only advances sqlite_sequence to max(id) seen; if events were ever
+    # deleted, the real sequence is higher, and restarting below it would
+    # re-issue an id — corrupting the telemetry /optimise depends on.
+    seq = manifest.get("events_seq")
+    if seq is not None:
+        conn.execute("DELETE FROM sqlite_sequence WHERE name='events'")
+        conn.execute("INSERT INTO sqlite_sequence (name, seq) VALUES ('events', ?)", (int(seq),))
+    conn.commit()
+    parts = ", ".join(f"{t}={total[t]}" for t, _, _ in CSV_TABLES)
+    print(f"Imported into {DB_PATH}: {parts}" + (f", events_seq={seq}" if seq is not None else ""))
+
+
+def cmd_verify_csv(args) -> None:
+    """Compare the live database against the CSVs, per table: row counts and
+    SHA-256 on both sides. Exit 1 on any mismatch. /sync push calls this before
+    it commits anything."""
+    src = Path(args.dir) if args.dir else _default_backup_dir()
+    conn = connect()
+    ok = True
+    print(f"{'table':<16} {'db rows':>8} {'csv rows':>9}  match")
+    for table, cols, order in CSV_TABLES:
+        db_bytes, db_n = _table_csv_bytes(conn, table, cols, order)
+        path = src / f"{table}.csv"
+        if not path.exists():
+            print(f"{table:<16} {db_n:>8} {'MISSING':>9}  NO")
+            ok = False
+            continue
+        csv_bytes = path.read_bytes()
+        csv_n = max(0, csv_bytes.decode('utf-8').count('\n') - 1)
+        match = hashlib.sha256(db_bytes).hexdigest() == hashlib.sha256(csv_bytes).hexdigest()
+        ok = ok and match
+        print(f"{table:<16} {db_n:>8} {csv_n:>9}  {'yes' if match else 'NO'}")
+    # events sequence, if a manifest is present
+    if (src / "manifest.json").exists():
+        man = json.loads((src / "manifest.json").read_text(encoding="utf-8"))
+        db_seq, csv_seq = _events_seq(conn), man.get("events_seq")
+        seq_ok = db_seq == csv_seq
+        ok = ok and seq_ok
+        print(f"{'events_seq':<16} {str(db_seq):>8} {str(csv_seq):>9}  {'yes' if seq_ok else 'NO'}")
+    if not ok:
+        print("VERIFY: MISMATCH — database and CSVs disagree.", file=sys.stderr)
+        raise SystemExit(1)
+    print("VERIFY: clean — database and CSVs agree.")
 
 
 # ---------------------------------------------------------------- argparse
@@ -1006,9 +1175,17 @@ def build_parser() -> argparse.ArgumentParser:
     d = sub.add_parser("dashboard", help="Markdown funnel + actionable lists.")
     d.set_defaults(func=cmd_dashboard)
 
-    e = sub.add_parser("export-csv", help="Backup escape hatch: dump tables to CSV.")
-    e.add_argument("--out", default=str(paths.home() / "state" / "backup"))
+    e = sub.add_parser("export-csv", help="Lossless, diff-friendly dump of all tables to CSV + manifest.json (the record of record).")
+    e.add_argument("--out", help="Output dir (default: <workspace>/state/backup).")
     e.set_defaults(func=cmd_export_csv)
+
+    ic = sub.add_parser("import-csv", help="Rebuild the database from CSVs (moves any existing DB aside first).")
+    ic.add_argument("--dir", help="CSV dir (default: <workspace>/state/backup).")
+    ic.set_defaults(func=cmd_import_csv)
+
+    vc = sub.add_parser("verify-csv", help="Compare the live DB against the CSVs; exit 1 on any mismatch.")
+    vc.add_argument("--dir", help="CSV dir (default: <workspace>/state/backup).")
+    vc.set_defaults(func=cmd_verify_csv)
     return p
 
 
