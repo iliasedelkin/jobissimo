@@ -66,6 +66,9 @@ TOKEN_RE = re.compile(r"[a-z0-9]+")
 SKIP_DIRS = {".git", "__pycache__", "profile", "node_modules"}
 SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".pyc",
                  ".zip", ".db"}
+# Machine-local, gitignored files that legitimately hold a personal path and
+# are never committed (the workspace pointer holds an absolute $JOBISSIMO_HOME).
+SKIP_NAMES = {".jobissimo"}
 # scrub_check itself holds the hash list; scanning it is meaningless.
 SELF = Path(__file__).name
 
@@ -116,7 +119,7 @@ def iter_files(root: Path):
             continue
         if any(part in SKIP_DIRS for part in p.parts):
             continue
-        if p.suffix.lower() in SKIP_SUFFIXES or p.name == SELF:
+        if p.suffix.lower() in SKIP_SUFFIXES or p.name == SELF or p.name in SKIP_NAMES:
             continue
         yield p
 
