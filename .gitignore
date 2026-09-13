@@ -14,10 +14,11 @@ __pycache__/
 
 # ---------------------------------------------------------------------------
 # PERSONAL DATA — the one rule that matters.
-# Everything personal lives under profile/ (the $JOBISSIMO_HOME workspace) and
-# config/ (this install's identity and targets). Both are gitignored entirely;
-# the shipped *.example.yaml templates live in templates/config/ (committed).
+# Everything personal lives in the workspace ($JOBISSIMO_HOME): knowledge,
+# positioning, artefacts, AND this install's config/. The workspace is the
+# user's own private git repo (see docs/sync.md), never committed here. The
+# `/profile/` entry covers the default in-repo layout; a relocated workspace
+# lives outside the repo entirely (found via the .jobissimo pointer above).
+# Shipped config templates live in templates/config/ (committed).
 # ---------------------------------------------------------------------------
 /profile/
-/config/*.yaml
-!/config/*.example.yaml
