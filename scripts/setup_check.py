@@ -115,7 +115,11 @@ def check_workspace(errors: list, warnings: list) -> None:
     backed up nor safe from `git clean -xfd`.
     """
     home, source = paths.home_with_source()
-    inside_repo = paths.REPO_ROOT in home.parents or home == paths.REPO_ROOT
+    # Resolve both sides: the pointer/default paths are not normalised, and on
+    # macOS /var vs /private/var alone would defeat the containment check.
+    home = home.resolve()
+    repo = paths.REPO_ROOT.resolve()
+    inside_repo = repo in home.parents or home == repo
     if not (home / ".git").exists():
         where = "inside the engine checkout" if inside_repo else str(home)
         warnings.append(
