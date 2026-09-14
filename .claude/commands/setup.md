@@ -82,6 +82,31 @@ Show an honest degradation table — e.g. *"no browser adapter found: discovery
 will run on email alerts and public ATS job-board APIs; everything downstream
 is unaffected"* — and move on. **Never block on a missing capability.**
 
+**Export is the one exception: prove it, don't probe it.** Discovery and mail
+degrade gracefully; a CV that cannot become a DOCX is not a degraded
+deliverable, it is no deliverable. `which pandoc` is not proof either — a
+present pandoc with an unreadable reference doc fails the same way. Convert
+something:
+
+```bash
+printf '# Smoke test\n\nOne line.\n' > /tmp/jobissimo_smoke.md
+pandoc /tmp/jobissimo_smoke.md --reference-doc templates/ats_reference.docx \
+  -o /tmp/jobissimo_smoke.docx && echo "DOCX OK"
+```
+
+If it fails, give the platform's install line before continuing:
+
+| Platform | DOCX | PDF (optional) |
+|---|---|---|
+| macOS | `brew install pandoc` | `brew install tectonic` |
+| Debian/Ubuntu | `sudo apt install pandoc` | `sudo apt install texlive-xetex` |
+| Windows | `winget install JohnMacFarlane.Pandoc` | `winget install tectonic` |
+
+A missing **PDF engine** is genuinely a warning — DOCX is the primary format
+and most ATS prefer it. A missing **pandoc** blocks the first-result
+milestone: record `tools.pandoc: false` and say plainly that `/prepare` will
+stop at audited markdown finals until it is installed.
+
 ### S1 · Bring everything you have
 
 One prompt, deliberately wide:

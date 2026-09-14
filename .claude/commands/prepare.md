@@ -61,6 +61,16 @@ ahead, or the last write came from another machine, surface a one-line warning
 and suggest `/sync pull`, then proceed. `/prepare` never pulls, pushes, or
 blocks on sync state — only `/sync` touches a remote.
 
+**Export capability (say it now, not at step 6).** If
+`config/capabilities.yaml` records `tools.pandoc: false`, or `pandoc` does not
+resolve on this machine, say so before generating anything: the chain will run
+and write audited markdown finals, but it stops short of DOCX/PDF and
+`export.py` will exit non-zero, so the job cannot reach `ready`. Offer the
+install line for the platform (`brew install pandoc` / `sudo apt install
+pandoc` / `winget install JohnMacFarlane.Pandoc`). The user then decides
+whether to install first or generate now and export later — both are fine.
+What is not fine is discovering it after the whole chain has been paid for.
+
 ```bash
 RUN_ID="$(date +%Y%m%d_%H%M%S)_prepare"
 python3 scripts/db.py log --run-id $RUN_ID --command prepare --action run_start \
