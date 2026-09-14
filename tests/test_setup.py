@@ -8,12 +8,19 @@ editing beyond that expected output.
 """
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from helpers import (EN_APP, EXPECTED, FIXTURES, make_workspace, run_script)
+from helpers import (EN_APP, EXPECTED, FIXTURES, REPO, make_workspace, run_script)
+
+sys.path.insert(0, str(REPO / "scripts"))
+import paths          # noqa: E402
+import setup_check    # noqa: E402
 
 
 class TestIntake(unittest.TestCase):
@@ -119,6 +126,86 @@ class TestSetupCheck(unittest.TestCase):
         res = run_script("setup_check.py", env=self.env)
         # warnings are allowed (e.g. no PDF engine on CI); errors are not
         self.assertEqual(res.returncode, 0, res.stdout)
+
+
+class TestWorkspaceGuard(unittest.TestCase):
+    """The workspace must be the user's own git repo, outside the engine clone.
+
+    The first external playtest ended with a full profile sitting unversioned
+    inside the engine checkout: gitignored, so `git status` looked clean and
+    nothing ever said it was one `git clean -xfd` from gone. These assert on
+    the warning text, not just the exit code — a guard nobody reads is no guard.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self._env = dict(os.environ)
+        self._repo_root = paths.REPO_ROOT
+        self._pointer = paths.POINTER_FILE
+        paths.POINTER_FILE = self.root / "no-such-pointer"
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self._env)
+        paths.REPO_ROOT = self._repo_root
+        paths.POINTER_FILE = self._pointer
+        self.tmp.cleanup()
+
+    def warnings_for(self, home: Path) -> list:
+        os.environ["JOBISSIMO_HOME"] = str(home)
+        errors, warnings = [], []
+        setup_check.check_workspace(errors, warnings)
+        self.assertEqual(errors, [], "workspace placement is a warning, never an error")
+        return warnings
+
+    @staticmethod
+    def git_init(path: Path) -> Path:
+        path.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init", "-q", str(path)], check=True, capture_output=True)
+        return path
+
+    def test_unversioned_workspace_warns_and_names_sync_init(self):
+        home = self.root / "profile"
+        home.mkdir()
+        warnings = self.warnings_for(home)
+        self.assertTrue(any("not a git repo" in w for w in warnings), warnings)
+        self.assertTrue(any("/sync init" in w for w in warnings), warnings)
+
+    def test_relocated_git_workspace_is_silent(self):
+        home = self.git_init(self.root / "elsewhere")
+        self.assertEqual(self.warnings_for(home), [])
+
+    def test_in_place_layout_names_the_git_clean_exposure(self):
+        paths.REPO_ROOT = self.root / "engine"
+        home = self.git_init(paths.REPO_ROOT / "profile")
+        warnings = self.warnings_for(home)
+        self.assertTrue(any("git clean -xfd" in w for w in warnings), warnings)
+        self.assertTrue(any("inside the engine checkout" in w for w in warnings), warnings)
+
+    def test_fresh_clone_default_says_no_workspace_exists(self):
+        """No $JOBISSIMO_HOME, no pointer — exactly a first `git clone`."""
+        paths.REPO_ROOT = self.root / "engine"
+        (paths.REPO_ROOT / "profile").mkdir(parents=True)
+        os.environ.pop("JOBISSIMO_HOME", None)
+        _, source = paths.home_with_source()
+        self.assertTrue(source.startswith("default"), source)
+        errors, warnings = [], []
+        setup_check.check_workspace(errors, warnings)
+        self.assertEqual(errors, [])
+        self.assertTrue(any("no workspace has been established" in w for w in warnings),
+                        warnings)
+
+    def test_warning_reaches_the_cli_output(self):
+        """In-process coverage is worthless if /doctor never prints it."""
+        home = self.root / "unversioned"
+        home.mkdir()
+        env = dict(self._env)
+        env["JOBISSIMO_HOME"] = str(home)
+        env["JOBISSIMO_CONFIG"] = str(FIXTURES / "sam-rivera" / "config")
+        res = run_script("setup_check.py", env=env)
+        self.assertEqual(res.returncode, 0, res.stdout)   # warning, not error
+        self.assertIn("not a git repo", res.stdout)
 
 
 if __name__ == "__main__":

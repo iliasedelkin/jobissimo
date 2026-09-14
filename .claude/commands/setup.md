@@ -31,6 +31,40 @@ never merges facts across sources into one bullet, never rounds a number.
 
 ## Phase A — Ingest (no questions but one)
 
+### S-0 · Workspace first — before anything is written
+
+Your career data and this engine repo are two different things, and setup is
+where they get separated. The engine stays a clean checkout the user can
+`git pull` and open pull requests from; everything about them lives in their
+own private repo. Nothing personal may be written until that exists.
+
+```bash
+python3 scripts/paths.py        # resolved workspace + which rule resolved it
+```
+
+If the reported source is `default <repo>/profile` and that directory is not
+already a git repo, **no workspace has been established — stop and run
+`/sync init`.** It owns the placement decision (relocated sibling directory,
+recommended, vs in place) and the `git clean -xfd` warning that goes with the
+in-place choice. Relay that decision to the user; do not choose for them.
+
+Say why, in one sentence, before asking: *"Everything I learn about you goes
+into your own private repo, separate from this one — so you can update the
+engine and contribute back without your CV ever being part of it."*
+
+Do not continue until `paths.py` reports a `.jobissimo pointer` or
+`JOBISSIMO_HOME env` source, or the in-place workspace is a git repo.
+
+At the end of setup, verify the separation actually held:
+
+```bash
+git -C "$(git rev-parse --show-toplevel)" status --porcelain
+```
+
+Empty is the expected result. Anything listed means setup wrote into the
+engine checkout — name those files to the user rather than letting them
+discover it at their next `git pull`.
+
 ### S0 · Preflight
 
 Probe before asking anything: `python3 scripts/setup_check.py` plus direct
@@ -47,6 +81,31 @@ adapters: {browse: claude-in-chrome | playwright | webfetch | manual, mail: gmai
 Show an honest degradation table — e.g. *"no browser adapter found: discovery
 will run on email alerts and public ATS job-board APIs; everything downstream
 is unaffected"* — and move on. **Never block on a missing capability.**
+
+**Export is the one exception: prove it, don't probe it.** Discovery and mail
+degrade gracefully; a CV that cannot become a DOCX is not a degraded
+deliverable, it is no deliverable. `which pandoc` is not proof either — a
+present pandoc with an unreadable reference doc fails the same way. Convert
+something:
+
+```bash
+printf '# Smoke test\n\nOne line.\n' > /tmp/jobissimo_smoke.md
+pandoc /tmp/jobissimo_smoke.md --reference-doc templates/ats_reference.docx \
+  -o /tmp/jobissimo_smoke.docx && echo "DOCX OK"
+```
+
+If it fails, give the platform's install line before continuing:
+
+| Platform | DOCX | PDF (optional) |
+|---|---|---|
+| macOS | `brew install pandoc` | `brew install tectonic` |
+| Debian/Ubuntu | `sudo apt install pandoc` | `sudo apt install texlive-xetex` |
+| Windows | `winget install JohnMacFarlane.Pandoc` | `winget install tectonic` |
+
+A missing **PDF engine** is genuinely a warning — DOCX is the primary format
+and most ATS prefer it. A missing **pandoc** blocks the first-result
+milestone: record `tools.pandoc: false` and say plainly that `/prepare` will
+stop at audited markdown finals until it is installed.
 
 ### S1 · Bring everything you have
 

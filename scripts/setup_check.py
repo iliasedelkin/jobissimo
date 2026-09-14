@@ -8,6 +8,8 @@ Validates that the install's configuration is coherent:
   back to neutral behaviour)
 - every target references a cluster the pack defines
 - capabilities.yaml reflects tools that actually resolve on this machine
+- the workspace is the user's own git repo and not an unversioned
+  directory inside the engine checkout
 
 Drift detection: profile/setup_state.yaml records a content hash per setup
 stage; if the inputs behind a stage changed (knowledge hand-edited, competency
@@ -105,6 +107,36 @@ def check_capabilities(errors: list, warnings: list) -> None:
         warnings.append("no PDF engine found — PDF export unavailable (DOCX is the primary format).")
 
 
+def check_workspace(errors: list, warnings: list) -> None:
+    """The workspace must be the user's own git repo, outside the engine checkout.
+
+    Personal data that sits un-versioned inside the clone is invisible to
+    `git status` (it is gitignored), so nothing tells the user it is neither
+    backed up nor safe from `git clean -xfd`.
+    """
+    home, source = paths.home_with_source()
+    # Resolve both sides: the pointer/default paths are not normalised, and on
+    # macOS /var vs /private/var alone would defeat the containment check.
+    home = home.resolve()
+    repo = paths.REPO_ROOT.resolve()
+    inside_repo = repo in home.parents or home == repo
+    if not (home / ".git").exists():
+        where = "inside the engine checkout" if inside_repo else str(home)
+        warnings.append(
+            f"workspace ({where}) is not a git repo — your knowledge, positioning "
+            "and pipeline state are unversioned and unsynced. Run `/sync init`.")
+    elif inside_repo:
+        warnings.append(
+            f"workspace {home} lives inside the engine checkout (the in-place "
+            "layout). Safe day to day, but `git clean -xfd` here would delete it, "
+            "`.git` included. `/sync init` can relocate it to a sibling directory.")
+    if source.startswith("default") and not (home / ".git").exists():
+        warnings.append(
+            "no workspace has been established — `$JOBISSIMO_HOME` is unset and "
+            "there is no `.jobissimo` pointer, so /setup would write personal data "
+            "into the engine clone. Run `/sync init` before /setup.")
+
+
 def check_drift(errors: list, warnings: list) -> None:
     state = packs.load_yaml(paths.setup_state())
     stages = state.get("stages") or {}
@@ -145,12 +177,14 @@ def main() -> int:
     args = parser.parse_args()
 
     errors, warnings = [], []
+    check_workspace(errors, warnings)
     check_configs(errors, warnings)
     check_capabilities(errors, warnings)
     check_drift(errors, warnings)
 
     if not args.quiet:
-        print(f"Workspace: {paths.home()}")
+        _home, _source = paths.home_with_source()
+        print(f"Workspace: {_home}  ({_source})")
         print(f"Pack:      {packs.active_pack()}")
         print(f"Languages: {', '.join(packs.configured_languages()) or '(none configured)'}")
         print()
