@@ -5,6 +5,11 @@ geography:
   onsite_ok_regions: [Italy]
   remote_ok: true
   relocation: "no"
+  work_modes: [remote, hybrid]
+  max_commute_minutes: 45
+employment:
+  types: [full-time]
+  exclude: [internship]
 seniority:
   baseline_years: 4
   stretch_down_cap_in_flight: 2

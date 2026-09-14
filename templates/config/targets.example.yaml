@@ -9,6 +9,13 @@ geography:
   onsite_ok_regions: [Your Country]
   remote_ok: true
   relocation: "EU with friction"   # or "no", "anywhere"
+  work_modes: [remote, hybrid]     # onsite | hybrid | remote — asked at setup, never inferred
+  max_commute_minutes: 45          # only meaningful when onsite or hybrid is listed
+
+employment:
+  # Matched against each posting's employment_type at hunt time.
+  types: [full-time]               # full-time | part-time | contract | freelance | internship
+  exclude: [internship]            # hard rejects — skipped outright, not down-scored
 
 seniority:
   baseline_years: 8                 # seniority match is scored by years REQUIRED, not title

@@ -35,6 +35,14 @@ Files (schema: `engine/schemas/pack.schema.json`):
   private telemetry.
 - **`locales/<code>.yaml`** — see below.
 
+**If `/setup` put you here**, you already have most of a pack. Setup's S5b
+stage derives a competency set from your own evidence for any role no pack
+covers, and writes it to `extra_role_clusters` in your `config/pipeline.yaml`;
+your `ats_report.md` files accumulate the lexicon. Lifting those two into
+`packs/<name>/roles.yaml` and `ats_keywords.yaml`, with the personal numbers
+stripped, is a complete first contribution — and it is what makes the pipeline
+work as well for your field as it currently does for product.
+
 ## Locale conventions (small, well-scoped, high-impact)
 
 The pipeline generates applications in the posting's language, and market

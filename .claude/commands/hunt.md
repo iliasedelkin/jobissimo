@@ -26,6 +26,13 @@ proceed regardless. `/hunt` never pulls, pushes, or blocks on sync state; only
 - `max_age_days` – skip postings older than this (default **7**; compute the
   cutoff date from today's date at run time – never hardcode a date)
 - `boards` – optional subset of the tiers in `config/boards.yaml`
+- `--first-run` – the bounded hunt `/setup` ends with. Score candidates until
+  `--limit` (default **5**) have been evaluated, then stop and present them
+  ranked with fit scores and reasons for the user to choose from; skip §0b
+  mail, §0c watchlist, and the board diversity floor (none of them exist yet
+  on a day-zero install). If nothing clears the shortlist bar, offer the
+  one-time criteria loosening described in `/setup`'s first-result milestone —
+  once, naming the axis and the value, never silently.
 - `time_budget_min` – wall-clock ceiling for the whole run (default **45**;
   a scheduled `/brief` run may set its own). On reaching the budget, stop the
   source loop where it is, finish the job currently in flight, and go
@@ -153,10 +160,21 @@ fixed cost.
   A genuinely NEW role at a known company is extracted and scored normally —
   then the same-company concurrency rule in §3b applies.
 - Older than `max_age_days`
-- Internship/stage, or executive (VP, C-level, Head of – unless
-  small-startup scope fits mid-senior). Junior roles at otherwise strong-fit
-  companies are NOT auto-skipped – score them per the pack's evaluation
-  rubric (`stretch_down` experiment, small tranche)
+- **Employment type the user excluded.** Read
+  `config/targets.yaml → employment`: a posting whose type is in `exclude` is
+  skipped outright (log `{"reason":"employment_type_excluded","type":"..."}`);
+  a type absent from a non-empty `types` list caps the recommendation at
+  `maybe`. Never assume permanent full-time — a user who asked for contract
+  work, or a student who wants an internship, said so at setup, and an empty
+  `employment` block means no preference was recorded, not "full-time only".
+- **Work mode the user cannot take.** A strictly-onsite posting outside
+  `geography.onsite_ok_regions`, or an onsite/hybrid role beyond
+  `geography.max_commute_minutes`, is a `location_fit` reject — not a
+  down-score — when `geography.work_modes` excludes that mode.
+- Executive (VP, C-level, Head of – unless small-startup scope fits
+  mid-senior). Junior roles at otherwise strong-fit companies are NOT
+  auto-skipped – score them per the pack's evaluation rubric (`stretch_down`
+  experiment, small tranche)
 - Matches a reject signal in `config/targets.yaml` (company class, sector,
   org shape)
 - Login-walled / broken / JD hidden behind an application – log as failed, move on
@@ -202,6 +220,9 @@ run, then apply per job):
   until the employer posting's eligible-country list is read (originate
   first, or record `remote_ok` pending origination) — region strings on
   aggregators are marketing copy.
+- `employment_type` from the JD (`full-time` | `part-time` | `contract` |
+  `freelance` | `internship`); record it on the row so `/optimise` can see
+  whether the declared preference matches what actually converts
 - `must_have_match` / `missing_keywords` (semicolon-separated)
 - `company_stage`, `company_signals`, `red_flags`
 - Decision: fit ≥ 4 + no red flags + location ≠ reject → `yes`;
