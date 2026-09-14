@@ -11,8 +11,9 @@ One of:
 - a single `job_id`
 - a list of `job_id`s
 - filters, e.g. `--priority high --recommendation yes`
-- `--fixture` – run the chain against a bundled sample JD (used by /setup's
-  first-result milestone; uses the top target's matching JD from `fixtures/`)
+- `--fixture` – run the chain against a bundled sample JD from `fixtures/`.
+  A development and test aid only: `/setup` reaches its first result against a
+  real posting the user chose, never a sample.
 - **default (no input):** every job with `status = shortlisted`
 
 Find candidates with `python3 scripts/db.py list --status shortlisted [...filters]`.

@@ -29,6 +29,49 @@ never merges facts across sources into one bullet, never rounds a number.
 
 ---
 
+## S-1 · Say the plan out loud, then follow it
+
+Setup takes 25–30 minutes and has no UI. The only thing that makes that
+tolerable is knowing the shape of it in advance, so print this before the
+first question and get a "go":
+
+> **Setting up takes about 25–30 minutes.** Here is the whole path, and what
+> you are holding at the end of it.
+>
+> | # | Stage | You do | ~min |
+> |---|---|---|---|
+> | 1 | Set up your private workspace | pick where it lives | 2 |
+> | 2 | Check the tools on this machine | nothing | 1 |
+> | 3 | Collect your documents | point me at files or a folder | 3 |
+> | 4 | Extract your career into a knowledge base | nothing — I read | 5 |
+> | 5 | Correct what I got wrong | confirm or fix, five at a time | 6 |
+> | 6 | Identity and logistics | short answers | 2 |
+> | 7 | Languages and markets | confirm a proposal | 2 |
+> | 8 | What you want to do, and where | the real decisions | 5 |
+> | 9 | Build and audit your positioning | nothing — generated | 2 |
+> | 10 | Find one real job and prepare for it | pick from a shortlist | 5 |
+>
+> **At the end you will have:** one real, live posting you chose, and a CV
+> plus cover letter tailored to it — audited line by line against your own
+> documents, ATS-scored, ready to send today.
+>
+> Stop whenever you like. Everything is written to disk as we go, and
+> `/setup --resume` picks up from the stage you left.
+
+Then print one line at every stage boundary, and nothing more:
+
+```
+[5/10 · Correct what I got wrong · ~11 min elapsed · next: identity and logistics]
+```
+
+If a stage runs long, say so and offer the queue rather than pressing on:
+*"we are 18 minutes in and this is stage 5 of 10 — I can defer the rest of
+these corrections to `/enrich` and take you straight to your first real
+application."* Deferring is a first-class outcome, not a failure; the queue
+exists precisely so the first session ends with something real in hand.
+
+---
+
 ## Phase A — Ingest (no questions but one)
 
 ### S-0 · Workspace first — before anything is written
@@ -222,7 +265,63 @@ Do not ask a monolingual user to configure a language matrix.
 6. Write `config/languages.yaml`. One language configured → the pipeline
    never raises the topic again; `/doctor --languages` reopens it.
 
+### S5b · Name the roles from the evidence, not from the catalogue
+
+**Pack availability must not influence which roles are proposed.** Exactly one
+substantial pack ships today (`packs/product`), so a catalogue-first
+conversation steers every developer, designer, and marketer toward product
+management — and scoring their evidence against a PM competency set produces a
+confident-looking fit percentage that means nothing. Derive the candidates
+from the user's own evidence first; pack coverage is a property of a candidate,
+not the source of the list.
+
+1. From the extracted roles, titles, and competencies, name the 3–5 role
+   families the evidence actually supports, and say where each came from:
+   *"six years shipping React and Node, two of them leading — frontend
+   engineering and full-stack engineering both fit; your last two titles say
+   'Product Engineer', which reads either way."*
+2. Ask what they want next. Their answer outranks the evidence ranking —
+   evidence says what is credible, never what is wanted.
+3. **Then**, and only then, check pack coverage, and say it plainly:
+
+   > `packs/product` covers product and analyst roles. Nothing ships for
+   > frontend engineering yet, so I will build that cluster's competency set
+   > from your own evidence and run on the generic pack. Everything works —
+   > scoring, auditing, ATS — but the competency set and keyword lexicon will
+   > be yours alone rather than community-reviewed.
+
+4. For a covered role: set `pack:` accordingly in `config/pipeline.yaml`.
+   For an uncovered one: `pack: generic`, derive the competency set from the
+   user's evidence, and add the cluster id to `extra_role_clusters` in
+   `config/pipeline.yaml` (`scripts/packs.py` unions it into the values
+   `db.py` accepts). **Never bend an uncovered role into a covered cluster
+   because the covered one has a ready-made competency list** — that is how a
+   designer ends up scored as a product manager.
+5. Offer the contribution path once, then drop it: *"if this works for you,
+   the competency set and lexicon we just built are most of a pack —
+   `CONTRIBUTING.md` has the shape, and it is the most useful thing you could
+   send back upstream."*
+
 ### S6 · Targets, top one first
+
+**Ask these four before ranking anything, and never infer them from a CV.**
+Where intake suggests an answer, offer it as a default to confirm or overwrite
+— a visible default is a proposal, an invisible one is an assumption.
+
+1. **Where can you actually work?** Base city, and which of onsite / hybrid /
+   remote you will take (`geography.work_modes`). If onsite or hybrid is in
+   the list, ask how far is too far (`geography.max_commute_minutes`).
+2. **Would you relocate, and where to?** "No" is a complete answer, and it
+   narrows the hunt usefully.
+3. **What kind of engagement?** Full-time, part-time, contract, freelance,
+   internship — any combination (`employment.types`). Ask explicitly whether
+   any of them is a hard no: those go to `employment.exclude` and are skipped
+   at hunt time rather than scored down. A student wanting internships and a
+   principal who would never take one both have to say so; the pipeline must
+   not assume permanent full-time.
+4. **Anything that rules a company out?** Sector, stage, size,
+   return-to-office mandates (`company_preferences.avoid`).
+
 
 Multiple ranked targets is the normal case, but only the top one is needed
 for the first result. For each candidate target show three axes and let the
@@ -230,7 +329,8 @@ user rank:
 
 - **Desire** — the user rates it 1–5. Theirs alone.
 - **Evidence fit** — computed from the competency map against that cluster's
-  canonical competency set in the pack's `roles.yaml`: a coverage
+  canonical competency set in the pack's `roles.yaml`, or against the
+  evidence-derived set written in S5b when no pack covers the cluster: a coverage
   percentage, the specific gaps, and a verdict of *credible now* /
   *credible with framing* / *stretch*.
 - **Market volume** — one live probe per target through the configured
@@ -281,10 +381,44 @@ list to see their first generated CV.
 
 ## ✦ First result milestone
 
-Run `/prepare --fixture`: the full generation chain — evidence map → drafts
-→ truth audit → ATS score → export — against the bundled sample JD matched
-to the top target (`fixtures/`), using the user's real profile. Show them
-the CV, the cover letter, the audit verdict and the score.
+**One real job, applied-ready, before setup ends.** No sample, no dry run —
+the thing the agenda promised. A fixture application costs the same full
+generation chain and produces something the user cannot send anywhere.
+
+```bash
+/hunt --first-run --limit 5
+```
+
+`--first-run` is a bounded hunt: score candidates against `targets.yaml` until
+five have been evaluated, then stop and show them ranked, with fit scores and
+reasons. The user picks one; run `/prepare <job_id>` on it — the ordinary
+chain, no special flag.
+
+**If none of the five clears the bar** — and only on this first hunt, once —
+offer the loosening explicitly, rather than silently widening the search or
+leaving the user with nothing to show for half an hour:
+
+> None of the five postings I scored clears your bar (fit ≥ {threshold}).
+> On day one that usually means the targets are tight, not that the market is
+> empty. For this first run only, I can relax {the specific axis: seniority
+> band / geography / must-signals} to {value} so you finish with a real
+> application in hand. Your saved criteria do not change — this affects this
+> one hunt.
+
+Name the axis and the value; never loosen silently, and never loosen twice.
+Log it so `/optimise` can later see whether day-zero targets are
+systematically too tight:
+
+```bash
+python3 scripts/db.py log --run-id $RUN_ID --command setup \
+  --action first_run_criteria_loosened \
+  --detail '{"axis":"seniority_band","from":"mid-senior","to":"mid"}'
+```
+
+If the user declines, end setup cleanly on *"profile ready, no match yet — run
+`/hunt` tomorrow"*. Do **not** fall back to the fixture.
+
+Then show them the CV, the cover letter, the audit verdict and the score.
 
 **Acceptance: audit PASS and deterministic ATS ≥ 75 first pass** — the same
 threshold `/prepare` uses to decide whether to regenerate. Below it, name
@@ -294,10 +428,11 @@ queue.
 
 Then hand over with the three things that actually happen next:
 
-1. Run `/hunt` — discovery starts now.
-2. Run `/enrich` when you have ten minutes — here is your profile strength
-   score and the answers that would raise it most.
-3. `/dashboard` any time.
+1. Send it. The DOCX and PDF are in the application folder; `/track` records
+   what happens next.
+2. Run `/hunt` tomorrow — discovery is a daily habit, not a one-off.
+3. Run `/enrich` when you have ten minutes — here is your profile strength
+   score and the answers that would raise it most. `/dashboard` any time.
 
 ---
 

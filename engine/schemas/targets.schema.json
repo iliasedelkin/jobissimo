@@ -11,7 +11,17 @@
         "base_country": {"type": "string"},
         "onsite_ok_regions": {"type": "array", "items": {"type": "string"}},
         "remote_ok": {"type": "boolean"},
+        "work_modes": {"type": "array", "items": {"enum": ["onsite", "hybrid", "remote"]}, "description": "Working arrangements the user will accept. Asked explicitly at setup, never inferred from a CV."},
+        "max_commute_minutes": {"type": "number", "description": "One-way commute tolerance, for onsite/hybrid roles."},
         "relocation": {"type": "string", "description": "e.g. 'EU with friction', 'no', 'anywhere'"}
+      }
+    },
+    "employment": {
+      "type": "object",
+      "description": "Engagement types the user will consider — matched at hunt time against the job row's employment_type.",
+      "properties": {
+        "types": {"type": "array", "items": {"enum": ["full-time", "part-time", "contract", "freelance", "internship"]}, "description": "Acceptable types. Absent or empty means no preference was recorded."},
+        "exclude": {"type": "array", "items": {"enum": ["full-time", "part-time", "contract", "freelance", "internship"]}, "description": "Hard rejects — a posting of this type is skipped, not down-scored."}
       }
     },
     "seniority": {

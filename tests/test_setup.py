@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -92,8 +93,14 @@ class TestCompetencyAndCoverage(unittest.TestCase):
 
 
 class TestFirstResultMilestone(unittest.TestCase):
-    """The acceptance gate of /setup: the bundled sample JD, prepared against
-    the fixture profile, passes the audit and scores >= 75 first pass."""
+    """The acceptance bar of /setup, exercised offline.
+
+    /setup itself now reaches its first result against a real posting the user
+    chose, not this fixture — a sample application costs the full generation
+    chain and produces something unsendable. The bundled JD stays as the
+    offline proxy for that bar (audit PASS + deterministic ATS >= 75), since a
+    test suite cannot hunt a live job.
+    """
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -126,6 +133,68 @@ class TestSetupCheck(unittest.TestCase):
         res = run_script("setup_check.py", env=self.env)
         # warnings are allowed (e.g. no PDF engine on CI); errors are not
         self.assertEqual(res.returncode, 0, res.stdout)
+
+
+class TestPreferenceValidation(unittest.TestCase):
+    """geography.work_modes / employment.* must be validated, not merely stored.
+
+    A typo is worse than an omission here: the value silently matches no
+    posting, and the user believes they set a preference that the hunt is
+    quietly ignoring.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cfg = Path(self.tmp.name) / "config"
+        shutil.copytree(FIXTURES / "sam-rivera" / "config", self.cfg)
+        self.env = make_workspace(Path(self.tmp.name), with_apps=False)
+        self.env["JOBISSIMO_CONFIG"] = str(self.cfg)
+        self.targets = self.cfg / "targets.yaml"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def check(self):
+        return run_script("setup_check.py", env=self.env)
+
+    def test_fixture_preferences_validate(self):
+        res = self.check()
+        self.assertEqual(res.returncode, 0, res.stdout)
+        self.assertNotIn("employment", res.stdout.split("WARN")[0])
+
+    def test_unknown_employment_type_is_an_error(self):
+        self.targets.write_text(
+            self.targets.read_text().replace("types: [full-time]", "types: [fulltime]"))
+        res = self.check()
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("unknown value `fulltime`", res.stdout)
+
+    def test_unknown_work_mode_is_an_error(self):
+        self.targets.write_text(
+            self.targets.read_text().replace("work_modes: [remote, hybrid]",
+                                             "work_modes: [remote, onsight]"))
+        res = self.check()
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("unknown value `onsight`", res.stdout)
+
+    def test_contradictory_employment_preference_is_an_error(self):
+        self.targets.write_text(
+            self.targets.read_text().replace("types: [full-time]",
+                                             "types: [full-time, internship]"))
+        res = self.check()
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("cannot be both wanted and rejected", res.stdout)
+
+    def test_absent_preferences_warn_rather_than_fail(self):
+        text = self.targets.read_text()
+        for line in ("  work_modes: [remote, hybrid]\n", "  max_commute_minutes: 45\n",
+                     "employment:\n", "  types: [full-time]\n", "  exclude: [internship]\n"):
+            text = text.replace(line, "")
+        self.targets.write_text(text)
+        res = self.check()
+        self.assertEqual(res.returncode, 0, res.stdout)   # absence is not a failure
+        self.assertIn("no geography.work_modes", res.stdout)
+        self.assertIn("records no employment preference", res.stdout)
 
 
 class TestWorkspaceGuard(unittest.TestCase):

@@ -32,6 +32,10 @@ import packs  # noqa: E402
 import paths  # noqa: E402
 
 
+WORK_MODES = {"onsite", "hybrid", "remote"}
+EMPLOYMENT_TYPES = {"full-time", "part-time", "contract", "freelance", "internship"}
+
+
 def content_hash(*files: Path) -> str:
     h = hashlib.sha256()
     for f in sorted(files):
@@ -71,6 +75,36 @@ def check_configs(errors: list, warnings: list) -> None:
                                   f"(pack defines: {', '.join(sorted(clusters)) or 'none'}).")
     elif targets:
         errors.append("targets.yaml `targets` must be a list.")
+
+    tcfg = packs.load_config("targets")
+    geo = tcfg.get("geography") or {}
+    emp = tcfg.get("employment") or {}
+    # A typo here is worse than an omission: the value silently matches nothing
+    # and the hunt quietly ignores a preference the user believes they set.
+    for field, values, allowed in (
+        ("geography.work_modes", geo.get("work_modes"), WORK_MODES),
+        ("employment.types", emp.get("types"), EMPLOYMENT_TYPES),
+        ("employment.exclude", emp.get("exclude"), EMPLOYMENT_TYPES),
+    ):
+        if values is None:
+            continue
+        if not isinstance(values, list):
+            errors.append(f"targets.yaml `{field}` must be a list.")
+            continue
+        for v in values:
+            if str(v) not in allowed:
+                errors.append(f"targets.yaml `{field}` has unknown value `{v}` "
+                              f"(allowed: {', '.join(sorted(allowed))}).")
+    both = set(map(str, emp.get("types") or [])) & set(map(str, emp.get("exclude") or []))
+    for v in sorted(both):
+        errors.append(f"targets.yaml lists `{v}` in both employment.types and "
+                      "employment.exclude — it cannot be both wanted and rejected.")
+    if not geo.get("work_modes"):
+        warnings.append("targets.yaml has no geography.work_modes — /hunt cannot tell "
+                        "onsite from remote for you. /setup S6 asks for it.")
+    if not (emp.get("types") or emp.get("exclude")):
+        warnings.append("targets.yaml records no employment preference — every "
+                        "engagement type scores the same. /setup S6 asks for it.")
 
     for code in packs.configured_languages():
         if not re.fullmatch(r"[a-z]{2}", code):
