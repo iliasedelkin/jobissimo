@@ -31,6 +31,40 @@ never merges facts across sources into one bullet, never rounds a number.
 
 ## Phase A — Ingest (no questions but one)
 
+### S-0 · Workspace first — before anything is written
+
+Your career data and this engine repo are two different things, and setup is
+where they get separated. The engine stays a clean checkout the user can
+`git pull` and open pull requests from; everything about them lives in their
+own private repo. Nothing personal may be written until that exists.
+
+```bash
+python3 scripts/paths.py        # resolved workspace + which rule resolved it
+```
+
+If the reported source is `default <repo>/profile` and that directory is not
+already a git repo, **no workspace has been established — stop and run
+`/sync init`.** It owns the placement decision (relocated sibling directory,
+recommended, vs in place) and the `git clean -xfd` warning that goes with the
+in-place choice. Relay that decision to the user; do not choose for them.
+
+Say why, in one sentence, before asking: *"Everything I learn about you goes
+into your own private repo, separate from this one — so you can update the
+engine and contribute back without your CV ever being part of it."*
+
+Do not continue until `paths.py` reports a `.jobissimo pointer` or
+`JOBISSIMO_HOME env` source, or the in-place workspace is a git repo.
+
+At the end of setup, verify the separation actually held:
+
+```bash
+git -C "$(git rev-parse --show-toplevel)" status --porcelain
+```
+
+Empty is the expected result. Anything listed means setup wrote into the
+engine checkout — name those files to the user rather than letting them
+discover it at their next `git pull`.
+
 ### S0 · Preflight
 
 Probe before asking anything: `python3 scripts/setup_check.py` plus direct
