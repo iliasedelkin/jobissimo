@@ -78,7 +78,15 @@ def config_dir() -> Path:
 
 
 def packs_dir() -> Path:
+    """Where the engine's shipped, community-maintained packs live."""
     return REPO_ROOT / "packs"
+
+
+def workspace_packs_dir() -> Path:
+    """Where an install's own packs live. Inside the workspace, so a personal
+    pack travels with /sync, survives a `git clean -xfd` in the engine
+    checkout, and is never a commit on a repo the user does not own."""
+    return home() / "packs"
 
 
 def engine_rules() -> Path:

@@ -103,11 +103,16 @@ Resolution order, last wins. A layer is only written by its owner.
 | Layer | Holds | Written by | Committed |
 |---|---|---|---|
 | Engine | scripts, command files, `engine/rules/`, schemas | maintainers | yes |
-| Pack | role clusters, ATS lexicons, board catalogue, locale conventions, evaluation rubric | community PR | yes |
+| Pack (shipped) | role clusters, ATS lexicons, board catalogue, locale conventions, evaluation rubric | community PR | yes |
+| Pack (local) | the same, for a role family no shipped pack covers — lives in `<workspace>/packs/<name>` and shadows a shipped pack of that name | `/setup` (forks `generic`), then the user | **no** — user's private repo |
 | Config | this install's identity, targets, languages, boards, capabilities | `/setup`, `/optimise` (with approval) | **no** — user's private repo |
 | Profile | knowledge, positioning, and every generated artefact | the user and the pipeline | **no** — user's private repo |
 
-A pack is never edited in place; a user override lands in `config/`. Config and
+A shipped pack is never edited in place. Small deltas land in `config/` (same
+filenames as the pack: `roles.yaml`, `ats_keywords.yaml`, `ats_synonyms.yaml`,
+`locales/<code>.yaml`) and extend it per term. A whole role family the packs do
+not cover becomes a local pack instead — `packs.py --fork` creates it,
+`--export` scrub-gates it back toward a community PR. Config and
 Profile live in the workspace (`$JOBISSIMO_HOME`, which contains `config/`) and
 are versioned via `/sync` in the user's own private repo, never this public one;
 the shipped config templates live in `templates/config/` (see `docs/sync.md`).

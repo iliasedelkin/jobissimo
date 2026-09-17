@@ -18,6 +18,10 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 import paths
@@ -176,8 +180,48 @@ def active_pack() -> str:
     return str(load_config("pipeline").get("pack") or "product")
 
 
+def pack_search_path(name: str | None = None) -> list:
+    """Where a pack may live, in resolution order: the install's own packs
+    first, then the engine's shipped ones. A workspace pack shadows a shipped
+    pack of the same name — that is how an install takes ownership of one."""
+    n = name or active_pack()
+    return [paths.workspace_packs_dir() / n, paths.packs_dir() / n]
+
+
 def pack_dir(name: str | None = None) -> Path:
-    return paths.packs_dir() / (name or active_pack())
+    """The resolved pack directory. Falls back to the engine location when
+    neither exists, so error messages name the conventional path."""
+    candidates = pack_search_path(name)
+    for path in candidates:
+        if (path / "pack.yaml").exists():
+            return path
+    return candidates[-1]
+
+
+def pack_origin(name: str | None = None) -> str:
+    """`workspace`, `engine`, or `missing` — which layer answered."""
+    ws, engine = pack_search_path(name)
+    if (ws / "pack.yaml").exists():
+        return "workspace"
+    if (engine / "pack.yaml").exists():
+        return "engine"
+    return "missing"
+
+
+def available_packs() -> list:
+    """(name, origin) for every resolvable pack, workspace ones first."""
+    found: list = []
+    seen: set = set()
+    for root, origin in ((paths.workspace_packs_dir(), "workspace"),
+                         (paths.packs_dir(), "engine")):
+        if not root.exists():
+            continue
+        for entry in sorted(root.iterdir()):
+            if entry.name in seen or not (entry / "pack.yaml").exists():
+                continue
+            seen.add(entry.name)
+            found.append((entry.name, origin))
+    return found
 
 
 def pack_yaml() -> dict:
@@ -322,8 +366,182 @@ def keywords_files() -> list:
     return [f for f in files if f.exists()]
 
 
+# --------------------------------------------------------------- authoring
+
+REQUIRED_PACK_FILES = ("pack.yaml", "roles.yaml", "evaluation.md",
+                       "ats_keywords.yaml", "ats_synonyms.yaml", "boards.yaml")
+
+
+def validate_pack(name: str) -> tuple:
+    """(errors, warnings) for a pack. Errors mean it cannot work; warnings
+    mean it will work but is thinner than a contribution should be. A pack
+    declaring `scaffold: true` (packs/generic) is intentionally incomplete:
+    the checks that only make sense for a finished pack are skipped."""
+    errors: list = []
+    warnings: list = []
+    root = pack_dir(name)
+    if not (root / "pack.yaml").exists():
+        return ([f"{name}: no pack.yaml at {root}"], [])
+    manifest = load_yaml(root / "pack.yaml")
+    scaffold = bool(manifest.get("scaffold"))
+
+    for fname in ("roles.yaml", "evaluation.md", "ats_keywords.yaml",
+                  "ats_synonyms.yaml"):
+        if not (root / fname).exists():
+            errors.append(f"missing {fname}")
+    if not manifest.get("name"):
+        errors.append("pack.yaml: no name")
+    if not manifest.get("figure_nouns"):
+        errors.append("pack.yaml: no figure_nouns")
+
+    clusters = load_yaml(root / "roles.yaml").get("clusters")
+    if not isinstance(clusters, dict) or not clusters:
+        errors.append("roles.yaml: no clusters")
+    elif not scaffold:
+        for cid, body in clusters.items():
+            comps = body.get("competencies") if isinstance(body, dict) else None
+            if not isinstance(comps, list) or not comps:
+                errors.append(f"roles.yaml: cluster {cid} has no competencies")
+
+    if not scaffold:
+        if not (root / "boards.yaml").exists():
+            warnings.append("no boards.yaml — /hunt falls back to the shipped catalogue")
+        if not (root / "locales").is_dir():
+            warnings.append("no locales/ — market conventions fall back to neutral")
+    return (errors, warnings)
+
+
+def fork_pack(source: str, new_name: str | None = None) -> Path:
+    """Copy a pack into the workspace so the install can edit it freely.
+    Returns the new directory. Refuses to clobber an existing workspace pack."""
+    src = pack_dir(source)
+    if not (src / "pack.yaml").exists():
+        raise SystemExit(f"packs: no pack named {source!r} (looked in "
+                         f"{', '.join(str(p) for p in pack_search_path(source))})")
+    name = new_name or source
+    dest = paths.workspace_packs_dir() / name
+    if dest.exists():
+        raise SystemExit(f"packs: {dest} already exists — pick another name "
+                         f"with --as, or edit the pack in place")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(src, dest)
+    manifest = dest / "pack.yaml"
+    if manifest.exists():
+        text = manifest.read_text(encoding="utf-8")
+        if name != source:
+            text = re.sub(r"^name:.*$", f"name: {name}", text, count=1, flags=re.M)
+        # A fork is the install's own pack, never a scaffold: drop the flag
+        # and the comment block that explains it, so the pack can be finished
+        # and exported under its own name.
+        kept: list = []
+        for line in text.splitlines():
+            if line.startswith("scaffold:"):
+                while kept and kept[-1].startswith("#"):
+                    kept.pop()
+                while kept and not kept[-1].strip():
+                    kept.pop()
+                continue
+            kept.append(line)
+        manifest.write_text("\n".join(kept).rstrip() + "\n", encoding="utf-8")
+    return dest
+
+
+def export_pack(name: str, force: bool = False) -> Path:
+    """Copy a workspace pack into the engine checkout so it can be reviewed
+    and opened as a PR. Scrub-gated: a pack carries competency wording and
+    board notes drawn from real applications, so it is checked for personal
+    data before it is allowed anywhere near the public repo."""
+    src = paths.workspace_packs_dir() / name
+    if not (src / "pack.yaml").exists():
+        raise SystemExit(f"packs: no workspace pack named {name!r} at {src}")
+    if load_yaml(src / "pack.yaml").get("scaffold"):
+        raise SystemExit(f"packs: {name} is a scaffold, not a finished pack. Fork it "
+                         f"under your own domain name first:\n"
+                         f"  python3 scripts/packs.py --fork {name} --as <yourdomain>")
+    errors, warnings = validate_pack(name)
+    if errors:
+        raise SystemExit("packs: pack is not well-formed, fix before exporting:\n  - "
+                         + "\n  - ".join(errors))
+    for w in warnings:
+        print(f"warning: {w}")
+    # Scrub a staging copy outside the workspace, never the pack in place:
+    # scrub_check skips any directory named `profile` (SKIP_DIRS), which is
+    # the default workspace name, so scanning the source would silently pass
+    # on a default install. Staging also scans exactly the bytes that land.
+    scrub = Path(__file__).resolve().parent / "scrub_check.py"
+    with tempfile.TemporaryDirectory() as staging:
+        staged = Path(staging) / name
+        shutil.copytree(src, staged)
+        result = subprocess.run([sys.executable, str(scrub), str(staged)],
+                                capture_output=True, text=True)
+        if result.returncode != 0:
+            detail = (result.stdout or result.stderr).replace(str(staged), str(src))
+            raise SystemExit("packs: scrub gate found personal data in the pack — "
+                             "nothing was copied.\n" + detail.strip())
+    dest = paths.packs_dir() / name
+    if dest.exists() and not force:
+        raise SystemExit(f"packs: {dest} already exists — pass --force to overwrite")
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(src, dest)
+    return dest
+
+
 def main() -> int:
-    argparse.ArgumentParser(description=__doc__.splitlines()[0]).parse_args()
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--list", action="store_true",
+                    help="List every resolvable pack and where it came from.")
+    ap.add_argument("--fork", metavar="NAME",
+                    help="Copy a pack into the workspace so you can edit it.")
+    ap.add_argument("--as", dest="as_name", metavar="NEW",
+                    help="Name for the forked pack (default: same name).")
+    ap.add_argument("--export", metavar="NAME",
+                    help="Copy a workspace pack into the engine checkout for a PR "
+                         "(scrub-gated and validated first).")
+    ap.add_argument("--validate", metavar="NAME",
+                    help="Report structural problems with a pack.")
+    ap.add_argument("--force", action="store_true",
+                    help="With --export, overwrite an existing shipped pack.")
+    args = ap.parse_args()
+
+    if args.list:
+        for name, origin in available_packs():
+            marker = " *" if name == active_pack() else "  "
+            print(f"{marker} {name:<16} {origin}")
+        return 0
+
+    if args.validate:
+        errors, warnings = validate_pack(args.validate)
+        origin = pack_origin(args.validate)
+        if not errors and not warnings:
+            print(f"{args.validate}: well-formed ({origin})")
+            return 0
+        print(f"{args.validate}: {len(errors)} error(s), {len(warnings)} warning(s)"
+              f"  ({origin})")
+        for e in errors:
+            print(f"  error:   {e}")
+        for w in warnings:
+            print(f"  warning: {w}")
+        return 1 if errors else 0
+
+    if args.fork:
+        dest = fork_pack(args.fork, args.as_name)
+        name = args.as_name or args.fork
+        print(f"Forked {args.fork} -> {dest}")
+        print(f"It now shadows any shipped pack of the same name.")
+        print(f"Next: set `pack: {name}` in config/pipeline.yaml, then edit away.")
+        print("It travels with /sync, so it reaches your other machines.")
+        return 0
+
+    if args.export:
+        dest = export_pack(args.export, force=args.force)
+        print(f"Exported {args.export} -> {dest}  (scrub gate passed)")
+        print("Next, in the engine repo:")
+        print(f"  git checkout -b pack/{args.export}")
+        print(f"  git add packs/{args.export} && git commit")
+        print("  open a PR — see CONTRIBUTING.md for the fixture and test it asks for")
+        return 0
+
     print(f"active pack:      {active_pack()}  ({pack_dir()})")
     print(f"candidate name:   {candidate_name() or '(not configured)'}")
     print(f"role clusters:    {', '.join(role_clusters()) or '(none)'}")
