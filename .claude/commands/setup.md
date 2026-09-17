@@ -290,28 +290,30 @@ not the source of the list.
    > scoring, auditing, ATS — but the competency set and keyword lexicon will
    > be yours alone rather than community-reviewed.
 
-4. For a covered role: set `pack:` accordingly in `config/pipeline.yaml`.
-   For an uncovered one: `pack: generic`, derive the competency set from the
-   user's evidence, and **write it to `config/roles.yaml`** — the cluster id
-   alone is not enough, because the competency set is what S6 scores evidence
-   fit against:
+4. **Covered role** — set `pack:` accordingly in `config/pipeline.yaml`. The
+   shipped pack stays authoritative and keeps improving upstream. If the
+   user's evidence adds competencies the pack's cluster lacks, put those in
+   `config/roles.yaml`, which extends the pack without forking it (see
+   `templates/config/roles.example.yaml`).
 
-   ```yaml
-   clusters:
-     Frontend:
-       title: Frontend Engineer
-       competencies: [react, typescript, component architecture, ...]
+   **Uncovered role** — do not bend it into a covered cluster, and do not run
+   on bare `generic`. Fork `generic` into the workspace under the user's own
+   domain name, so they own a real pack they can grow and later contribute:
+
+   ```bash
+   python3 scripts/packs.py --fork generic --as <domain>   # e.g. uxd
    ```
 
-   `scripts/packs.py` layers that over the pack and unions the id into the
-   values `db.py` accepts (`templates/config/roles.example.yaml` has the full
-   shape; `docs/packs.md` explains the layering). The same file extends a
-   cluster the pack *does* define, when the user's evidence adds to it.
-   `extra_role_clusters` in `config/pipeline.yaml` still registers a bare id
-   with no competencies — use it only when there is genuinely nothing to
-   record. **Never bend an uncovered role into a covered cluster because the
-   covered one has a ready-made competency list** — that is how a designer
-   ends up scored as a product manager.
+   Then write the derived competency set into that pack's `roles.yaml` —
+   cluster id, title, and the competencies, because the competency set is what
+   S6 scores evidence fit against — and set `pack: <domain>` in
+   `config/pipeline.yaml`. The pack lives in the workspace, so it travels with
+   `/sync` and an engine `git clean` cannot touch it.
+
+   **Never bend an uncovered role into a covered cluster because the covered
+   one has a ready-made competency list** — that is how a designer ends up
+   scored as a product manager.
+
 5. Offer the contribution path once, then drop it: *"if this works for you,
    the competency set and lexicon we just built are most of a pack —
    `CONTRIBUTING.md` has the shape, and it is the most useful thing you could

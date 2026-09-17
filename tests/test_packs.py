@@ -13,11 +13,13 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from helpers import REPO
 
 sys.path.insert(0, str(REPO / "scripts"))
 import packs         # noqa: E402
+import paths         # noqa: E402
 
 
 def write(path: Path, body: str) -> None:
@@ -158,3 +160,145 @@ class TestConfigLayer(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWorkspacePacks(unittest.TestCase):
+    """A pack the install owns lives in the workspace, so it travels with
+    /sync and a `git clean -xfd` in the engine checkout cannot eat it."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.home = root / "profile"
+        self.cfg = self.home / "config"
+        self.cfg.mkdir(parents=True)
+        self.engine_packs = root / "engine_packs"
+        write(self.cfg / "pipeline.yaml", "pack: product\n")
+        self._prev = {k: os.environ.get(k) for k in ("JOBISSIMO_CONFIG", "JOBISSIMO_HOME")}
+        os.environ["JOBISSIMO_CONFIG"] = str(self.cfg)
+        os.environ["JOBISSIMO_HOME"] = str(self.home)
+
+    def tearDown(self):
+        for k, v in self._prev.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        self.tmp.cleanup()
+
+    def _fake_pack(self, name: str, scaffold: bool = False, competencies: str = "[a, b]"):
+        d = self.home / "packs" / name
+        write(d / "pack.yaml", f"""
+            name: {name}
+            figure_nouns: [months, weeks]
+            {'scaffold: true' if scaffold else ''}
+        """)
+        write(d / "roles.yaml", f"clusters:\n  X:\n    competencies: {competencies}\n")
+        for f in ("evaluation.md", "ats_keywords.yaml", "ats_synonyms.yaml"):
+            write(d / f, "\n")
+        return d
+
+    def test_workspace_pack_shadows_a_shipped_pack_of_the_same_name(self):
+        self.assertEqual(packs.pack_origin("product"), "engine")
+        self._fake_pack("product")
+        self.assertEqual(packs.pack_origin("product"), "workspace")
+        self.assertEqual(packs.pack_dir("product").parent.resolve(),
+                         (self.home / "packs").resolve())
+
+    def test_unknown_pack_reports_missing(self):
+        self.assertEqual(packs.pack_origin("nosuchpack"), "missing")
+
+    def test_available_packs_lists_workspace_first(self):
+        self._fake_pack("uxd")
+        names = dict(packs.available_packs())
+        self.assertEqual(names["uxd"], "workspace")
+        self.assertEqual(names["product"], "engine")
+
+    # --- fork ----------------------------------------------------------
+
+    def test_fork_copies_a_shipped_pack_into_the_workspace(self):
+        dest = packs.fork_pack("product", "myproduct")
+        self.assertTrue((dest / "roles.yaml").exists())
+        self.assertEqual(dest.parent.resolve(), (self.home / "packs").resolve())
+        self.assertEqual(packs.pack_origin("myproduct"), "workspace")
+
+    def test_fork_renames_the_manifest(self):
+        dest = packs.fork_pack("product", "myproduct")
+        self.assertIn("name: myproduct", (dest / "pack.yaml").read_text())
+
+    def test_fork_clears_the_scaffold_flag(self):
+        """generic is a scaffold; a fork of it is the user's real pack."""
+        dest = packs.fork_pack("generic", "uxd")
+        body = (dest / "pack.yaml").read_text()
+        self.assertNotIn("scaffold:", body)
+        self.assertIn("figure_nouns:", body, "fork must not truncate the manifest")
+
+    def test_fork_refuses_to_clobber_an_existing_workspace_pack(self):
+        packs.fork_pack("product", "myproduct")
+        with self.assertRaises(SystemExit):
+            packs.fork_pack("product", "myproduct")
+
+    def test_fork_of_an_unknown_pack_fails(self):
+        with self.assertRaises(SystemExit):
+            packs.fork_pack("nosuchpack")
+
+    # --- validate ------------------------------------------------------
+
+    def test_shipped_packs_are_well_formed(self):
+        for name in ("product", "generic"):
+            with self.subTest(pack=name):
+                errors, _ = packs.validate_pack(name)
+                self.assertEqual(errors, [])
+
+    def test_scaffold_is_exempt_from_finished_pack_checks(self):
+        self._fake_pack("bare", scaffold=True, competencies="[]")
+        errors, warnings = packs.validate_pack("bare")
+        self.assertEqual(errors, [])
+        self.assertEqual(warnings, [])
+
+    def test_empty_competencies_are_an_error_for_a_real_pack(self):
+        self._fake_pack("bare", scaffold=False, competencies="[]")
+        errors, _ = packs.validate_pack("bare")
+        self.assertTrue(any("competencies" in e for e in errors))
+
+    # --- export --------------------------------------------------------
+
+    def test_export_copies_into_the_engine_checkout(self):
+        self._fake_pack("uxd")
+        with mock.patch.object(paths, "packs_dir", return_value=self.engine_packs):
+            dest = packs.export_pack("uxd")
+        self.assertTrue((dest / "pack.yaml").exists())
+        self.assertEqual(dest, self.engine_packs / "uxd")
+
+    def test_export_refuses_a_scaffold(self):
+        self._fake_pack("uxd", scaffold=True)
+        with mock.patch.object(paths, "packs_dir", return_value=self.engine_packs):
+            with self.assertRaises(SystemExit):
+                packs.export_pack("uxd")
+
+    def test_export_refuses_a_malformed_pack(self):
+        self._fake_pack("uxd", competencies="[]")
+        with mock.patch.object(paths, "packs_dir", return_value=self.engine_packs):
+            with self.assertRaises(SystemExit):
+                packs.export_pack("uxd")
+
+    def test_export_scrub_gate_blocks_personal_data(self):
+        d = self._fake_pack("uxd")
+        # A pipeline job-id is exactly the leak this gate exists for: a pack
+        # grown from real applications picking up board-specific ids. Split so
+        # this file does not trip the repo's own scrub scan (see test_scrub).
+        leak = "linkedin" + "042"
+        (d / "evaluation.md").write_text(f"seen in {leak}\n")
+        with mock.patch.object(paths, "packs_dir", return_value=self.engine_packs):
+            with self.assertRaises(SystemExit) as cm:
+                packs.export_pack("uxd")
+        self.assertIn("scrub", str(cm.exception).lower())
+        self.assertFalse((self.engine_packs / "uxd").exists(), "nothing may be copied")
+
+    def test_export_refuses_to_overwrite_without_force(self):
+        self._fake_pack("uxd")
+        with mock.patch.object(paths, "packs_dir", return_value=self.engine_packs):
+            packs.export_pack("uxd")
+            with self.assertRaises(SystemExit):
+                packs.export_pack("uxd")
+            self.assertTrue(packs.export_pack("uxd", force=True).exists())

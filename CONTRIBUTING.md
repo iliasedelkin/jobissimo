@@ -35,13 +35,24 @@ Files (schema: `engine/schemas/pack.schema.json`):
   private telemetry.
 - **`locales/<code>.yaml`** — see below.
 
-**If `/setup` put you here**, you already have most of a pack. Setup's S5b
-stage derives a competency set from your own evidence for any role no pack
-covers, and writes it to `extra_role_clusters` in your `config/pipeline.yaml`;
-your `ats_report.md` files accumulate the lexicon. Lifting those two into
-`packs/<name>/roles.yaml` and `ats_keywords.yaml`, with the personal numbers
-stripped, is a complete first contribution — and it is what makes the pipeline
-work as well for your field as it currently does for product.
+**If `/setup` put you here, you already have a pack.** For a role no pack
+covers, setup forks `generic` into your workspace under your own domain name
+and fills in the competency set derived from your own evidence; your
+`ats_report.md` files accumulate the lexicon as you apply. That pack is yours
+— edit it freely, it travels with `/sync`.
+
+When it works for you, contribute it:
+
+```bash
+python3 scripts/packs.py --validate <name>   # structural check
+python3 scripts/packs.py --export <name>     # copies it into this checkout
+```
+
+`--export` refuses to copy anything until the scrub gate passes, because a
+pack you have been using carries wording drawn from real applications. Review
+the result, strip any remaining personal numbers, add a fixture and a test,
+then open the PR. It is what makes the pipeline work as well for your field as
+it currently does for product.
 
 ## Locale conventions (small, well-scoped, high-impact)
 
