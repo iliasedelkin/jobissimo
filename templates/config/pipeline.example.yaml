@@ -20,7 +20,10 @@ thresholds:
   adaptive_fit_bar: 4.0
   velocity_sla_days: 5     # prepare-and-apply window for high-fit jobs
 
-# Optional: extra role clusters on top of the pack's roles.yaml.
+# Optional: extra role clusters on top of the pack's roles.yaml. This form
+# registers the id only. To give a cluster its own competencies — or to extend
+# one the pack already defines — use config/roles.yaml instead
+# (see templates/config/roles.example.yaml and docs/packs.md).
 # extra_role_clusters: [DataPM]
 
 # Optional: override the location_fit enum. Default:

@@ -86,18 +86,27 @@ def load_synonyms(files: list) -> dict:
     return groups
 
 
-def load_taxonomy(path: Path) -> dict:
-    """Reader for ats_keywords.yaml: `section:` headers + `- term` items."""
-    sections, current = {}, None
-    for line in read(path).splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if stripped.endswith(":") and not stripped.startswith("-"):
-            current = stripped[:-1].strip()
-            sections[current] = []
-        elif stripped.startswith("- ") and current:
-            sections[current].append(stripped[2:].strip().lower())
+def load_taxonomy(files) -> dict:
+    """Reader for ats_keywords.yaml: `section:` headers + `- term` items.
+    Multiple files merge: a later file (the install's config override) extends
+    the sections an earlier one (the pack) already defined, and may add its
+    own. Terms are deduped, so re-stating a pack term is harmless."""
+    if isinstance(files, (str, Path)):
+        files = [files]
+    sections: dict = {}
+    for path in files:
+        current = None
+        for line in read(path).splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if stripped.endswith(":") and not stripped.startswith("-"):
+                current = stripped[:-1].strip()
+                sections.setdefault(current, [])
+            elif stripped.startswith("- ") and current:
+                term = stripped[2:].strip().lower()
+                if term not in sections[current]:
+                    sections[current].append(term)
     return sections
 
 
@@ -401,7 +410,7 @@ def main() -> int:
     breakdown.append(("Nice-to-have requirement coverage", nice_pts, 5, nice_note))
 
     # --- JD-vocabulary layer: hard/soft skill terms extracted from the JD ----
-    taxonomy = load_taxonomy(packs.keywords_file())
+    taxonomy = load_taxonomy(packs.keywords_files())
     jd_hard_terms, jd_soft_terms = extract_jd_keywords(jd_text, taxonomy, synonyms)
     no_evidence_terms = {r["jd_wording"].lower() for r in rows if r["status"] == "no_evidence"}
 
