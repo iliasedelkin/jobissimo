@@ -292,11 +292,26 @@ not the source of the list.
 
 4. For a covered role: set `pack:` accordingly in `config/pipeline.yaml`.
    For an uncovered one: `pack: generic`, derive the competency set from the
-   user's evidence, and add the cluster id to `extra_role_clusters` in
-   `config/pipeline.yaml` (`scripts/packs.py` unions it into the values
-   `db.py` accepts). **Never bend an uncovered role into a covered cluster
-   because the covered one has a ready-made competency list** — that is how a
-   designer ends up scored as a product manager.
+   user's evidence, and **write it to `config/roles.yaml`** — the cluster id
+   alone is not enough, because the competency set is what S6 scores evidence
+   fit against:
+
+   ```yaml
+   clusters:
+     Frontend:
+       title: Frontend Engineer
+       competencies: [react, typescript, component architecture, ...]
+   ```
+
+   `scripts/packs.py` layers that over the pack and unions the id into the
+   values `db.py` accepts (`templates/config/roles.example.yaml` has the full
+   shape; `docs/packs.md` explains the layering). The same file extends a
+   cluster the pack *does* define, when the user's evidence adds to it.
+   `extra_role_clusters` in `config/pipeline.yaml` still registers a bare id
+   with no competencies — use it only when there is genuinely nothing to
+   record. **Never bend an uncovered role into a covered cluster because the
+   covered one has a ready-made competency list** — that is how a designer
+   ends up scored as a product manager.
 5. Offer the contribution path once, then drop it: *"if this works for you,
    the competency set and lexicon we just built are most of a pack —
    `CONTRIBUTING.md` has the shape, and it is the most useful thing you could

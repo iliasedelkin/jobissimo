@@ -1,0 +1,25 @@
+# Optional. Extends the active pack's roles.yaml — it never replaces it.
+#
+# Resolution is per term, not per file: omitting a pack competency does not
+# remove it, and re-stating one is a harmless no-op. There is no way to remove
+# a pack term from here; if a pack ships a wrong term, fix the pack.
+#
+# Copy to <workspace>/config/roles.yaml and edit. See docs/packs.md.
+
+# Competencies every cluster shares, stated once. Merged into all of them,
+# including clusters the pack defines. `common` is never a cluster id itself.
+# common:
+#   competencies: [written communication, stakeholder management]
+
+# clusters:
+#   # An id the pack already defines: these competencies are ADDED to it.
+#   PM:
+#     competencies: [pricing strategy]
+#
+#   # A new id: defines a cluster the pack does not cover, competencies and
+#   # all. This is what `extra_role_clusters` in pipeline.yaml cannot do —
+#   # that form registers a bare id with no competencies.
+#   Design:
+#     title: Product Designer
+#     competencies: [interaction design, design systems, user research]
+#     adjacent: [PM]

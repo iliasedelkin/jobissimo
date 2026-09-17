@@ -24,5 +24,5 @@
     }
   },
   "required": ["name", "description"],
-  "$comment": "roles.yaml shape: clusters: {<id>: {title, competencies: [..], adjacent: [..]}}. locales/<code>.yaml shape: verified: bool, personal_details_block: conventional|anti_pattern|unknown, personal_details_fields: [..], photo: expected|anti_pattern|unknown, cv_length_norm, formality, synonyms: {canonical: [bridges]}. A pack is never edited in place; user overrides land in config/."
+  "$comment": "roles.yaml shape: optional common: {competencies: [..]} merged into every cluster, plus clusters: {<id>: {title, competencies: [..], adjacent: [..]}}. locales/<code>.yaml shape: verified: bool, personal_details_block: conventional|anti_pattern|unknown, personal_details_fields: [..], photo: expected|anti_pattern|unknown, cv_length_norm, formality, synonyms: {canonical: [bridges]}. A pack is never edited in place; user overrides land in config/ under the same filenames (config/roles.yaml, config/ats_keywords.yaml, config/ats_synonyms.yaml, config/locales/<code>.yaml) and extend the pack per term rather than replacing it."
 }

@@ -77,10 +77,43 @@ class _Node:
             self._commit()
 
 
+def _join_wrapped(text: str) -> list:
+    """Join an inline collection that wraps across lines, so
+    `competencies: [a, b,` / `c]` parses as a list rather than a truncated
+    string. Only a collection opened on a `key:` line continues, and only
+    until its matching close — the subset stays deliberately small."""
+    out: list = []
+    buf = None
+    closer = ""
+    for raw in text.splitlines():
+        if buf is None:
+            stripped = raw.strip()
+            m = None
+            if stripped and not stripped.startswith("#"):
+                m = re.match(r"^(.+?):\s*([\[\{].*)$", stripped)
+            if m:
+                frag = m.group(2)
+                opener = frag[0]
+                closer = "]" if opener == "[" else "}"
+                if frag.count(opener) > frag.count(closer):
+                    buf = raw.rstrip()
+                    continue
+            out.append(raw)
+        else:
+            buf += " " + raw.strip()
+            opener = "[" if closer == "]" else "{"
+            if buf.count(opener) <= buf.count(closer):
+                out.append(buf)
+                buf = None
+    if buf is not None:
+        out.append(buf)
+    return out
+
+
 def parse_simple_yaml(text: str) -> dict:
     root: dict = {}
     stack: list = [(-1, root)]  # (indent, dict | _Node)
-    for raw in text.splitlines():
+    for raw in _join_wrapped(text):
         if not raw.strip() or raw.lstrip().startswith("#"):
             continue
         indent = len(raw) - len(raw.lstrip(" "))
@@ -159,16 +192,77 @@ def candidate_name() -> str | None:
     return str(name) if name else None
 
 
+def _merge_terms(*groups) -> list:
+    """Union of term lists, order-preserving and case-insensitively deduped.
+    The config layer extends the pack rather than replacing it: `last wins`
+    applies per term, not per file, so a pack term can never be silently
+    dropped by a config file that simply omits it."""
+    out: list = []
+    seen: set = set()
+    for group in groups:
+        if isinstance(group, str):
+            group = [group]
+        for term in group or []:
+            t = str(term).strip()
+            if t and t.lower() not in seen:
+                seen.add(t.lower())
+                out.append(t)
+    return out
+
+
+def _blank_cluster() -> dict:
+    return {"title": None, "competencies": [], "adjacent": []}
+
+
+def _roles_layers() -> list:
+    """The pack's roles.yaml, then the config override if the install has one.
+    Later layers extend earlier ones."""
+    layers = [load_yaml(pack_dir() / "roles.yaml")]
+    override = paths.config_dir() / "roles.yaml"
+    if override.exists():
+        layers.append(load_yaml(override))
+    return layers
+
+
+def roles() -> dict:
+    """Resolved cluster definitions: pack ∪ config, with each layer's
+    `common:` competencies merged into every cluster. A config layer may
+    extend an existing cluster's competency set or define a new cluster."""
+    layers = _roles_layers()
+    common = _merge_terms(*[(layer.get("common") or {}).get("competencies")
+                            for layer in layers
+                            if isinstance(layer.get("common"), dict)])
+    resolved: dict = {}
+    for layer in layers:
+        clusters = layer.get("clusters")
+        if not isinstance(clusters, dict):
+            continue
+        for cid, body in clusters.items():
+            if not isinstance(body, dict):
+                continue
+            entry = resolved.setdefault(cid, _blank_cluster())
+            if body.get("title"):
+                entry["title"] = str(body["title"])
+            entry["competencies"] = _merge_terms(entry["competencies"],
+                                                 body.get("competencies"))
+            entry["adjacent"] = _merge_terms(entry["adjacent"], body.get("adjacent"))
+    for cid in (load_config("pipeline").get("extra_role_clusters") or []):
+        resolved.setdefault(str(cid), _blank_cluster())
+    if common:
+        for entry in resolved.values():
+            entry["competencies"] = _merge_terms(common, entry["competencies"])
+    return resolved
+
+
 def role_clusters() -> list:
     """Cluster ids the scorer may use: pack roles ∪ config additions."""
-    clusters: list = []
-    roles = load_yaml(pack_dir() / "roles.yaml").get("clusters") or {}
-    if isinstance(roles, dict):
-        clusters.extend(roles.keys())
-    for extra in (load_config("pipeline").get("extra_role_clusters") or []):
-        if extra not in clusters:
-            clusters.append(str(extra))
-    return clusters
+    return list(roles().keys())
+
+
+def cluster_competencies(cluster: str) -> list:
+    """The resolved competency set for one cluster (pack + config + common)."""
+    entry = roles().get(cluster)
+    return list(entry["competencies"]) if entry else []
 
 
 def location_fit_values() -> list:
@@ -213,11 +307,19 @@ def synonym_files() -> list:
         files += [locales / f"{code}.yaml" for code in langs]
     elif locales.exists():
         files += sorted(locales.glob("*.yaml"))
+    # Config layer last: an install's own bridges extend the pack's table.
+    cfg = paths.config_dir()
+    files.append(cfg / "ats_synonyms.yaml")
+    files += [cfg / "locales" / f"{code}.yaml" for code in langs]
     return [f for f in files if f.exists()]
 
 
-def keywords_file() -> Path:
-    return pack_dir() / "ats_keywords.yaml"
+def keywords_files() -> list:
+    """The pack's hard/soft classifier plus the install's override, in
+    resolution order. Later files extend earlier sections."""
+    files = [pack_dir() / "ats_keywords.yaml",
+             paths.config_dir() / "ats_keywords.yaml"]
+    return [f for f in files if f.exists()]
 
 
 def main() -> int:
@@ -228,6 +330,7 @@ def main() -> int:
     print(f"location fits:    {', '.join(location_fit_values())}")
     print(f"languages:        {', '.join(configured_languages()) or '(not configured)'}")
     print(f"synonym files:    {', '.join(str(f) for f in synonym_files())}")
+    print(f"keyword files:    {', '.join(str(f) for f in keywords_files())}")
     return 0
 
 

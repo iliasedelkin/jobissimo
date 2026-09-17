@@ -1,6 +1,11 @@
 # Role clusters for the product pack. Cluster ids are the values db.py
 # accepts for role_cluster; each cluster's canonical competency set is what
 # /setup S6 computes evidence fit against.
+#
+# An optional top-level `common:` block (competencies shared by every cluster)
+# is supported and merged into each one — see docs/packs.md. These six
+# clusters overlap too little to need it; a pack whose clusters share most of
+# their competency set should use it rather than restating terms per cluster.
 clusters:
   PO:
     title: Product Owner
