@@ -1,6 +1,6 @@
-# Generic pack roles — one open cluster. /setup asks the user to name their
-# target role(s) and adds each as an extra_role_clusters entry in
-# config/pipeline.yaml with competencies derived from their own evidence.
+# Generic pack roles — one open cluster, deliberately empty. /setup forks this
+# pack into the workspace (packs.py --fork generic --as <domain>) and replaces
+# this cluster with the user's real ones, competencies included.
 clusters:
   General:
     title: General

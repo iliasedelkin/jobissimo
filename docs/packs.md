@@ -99,8 +99,60 @@ overrides (see the table above for where each file lands). Use it to bootstrap
 a role family no pack covers yet — then consider contributing the pack
 upstream.
 
+## Where a pack lives
+
+A pack resolves from two places, in order:
+
+| Order | Location | What lives there |
+|---|---|---|
+| 1 | `<workspace>/packs/<name>` | **your** packs — forked or written from scratch |
+| 2 | `packs/<name>` (engine checkout) | the shipped, community-maintained packs |
+
+A workspace pack **shadows** a shipped pack of the same name — that is how an
+install takes ownership of one. Because it lives in the workspace it travels
+with `/sync` to your other machines, it is never a commit on a repo you do not
+own, and a `git clean -xfd` in the engine checkout cannot touch it.
+
+```bash
+python3 scripts/packs.py --list                      # every pack + where it came from
+python3 scripts/packs.py --fork product --as myprod  # take ownership of a copy
+python3 scripts/packs.py --validate myprod           # structural check
+```
+
+Forking gives you the whole pack — including `evaluation.md` and
+`figure_nouns`, which have no config override and cannot be tuned any other
+way. The trade-off is that a fork stops receiving upstream improvements, so
+prefer the config layer above for small deltas and fork when you need real
+control.
+
+`packs/generic` is marked `scaffold: true`: it is intentionally incomplete, so
+the finished-pack checks are skipped for it and it cannot be exported under
+that name. Forking it clears the flag — the fork is a real pack.
+
+## Contributing a pack back
+
+```bash
+python3 scripts/packs.py --export <name>
+```
+
+Copies a workspace pack into the engine checkout so you can open a PR. Before
+it copies anything it validates the structure and runs the **scrub gate** over
+a staging copy — a pack you have been using carries competency wording and
+board notes drawn from real applications, and none of that belongs in a public
+repo. Nothing is written if the gate finds anything.
+
+The scrub runs on a staging copy rather than the pack in place because
+`scrub_check.py` skips directories named `profile` (the default workspace
+name), so scanning the source would silently pass on a default install.
+
 ## Building a pack
 
-Copy `packs/generic/` to `packs/<yourdomain>/`, fill the files above, and set
-`pack: <yourdomain>` in `config/pipeline.yaml`. Add a fixture and a test if
-you are contributing it back. See [CONTRIBUTING.md](../CONTRIBUTING.md).
+```bash
+python3 scripts/packs.py --fork generic --as <yourdomain>
+```
+
+Fill in the files above in `<workspace>/packs/<yourdomain>/` and set
+`pack: <yourdomain>` in `config/pipeline.yaml`. Build it in the workspace, not
+in the engine checkout: it is yours, it syncs, and it survives a `git clean`.
+When it works, `--export` it and add a fixture and a test.
+See [CONTRIBUTING.md](../CONTRIBUTING.md).
