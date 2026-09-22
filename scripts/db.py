@@ -383,6 +383,19 @@ def cmd_set_status(args) -> None:
         log_event(conn, run_id=args.run_id, command="set-status",
                   job_id=args.job_id, action="forced_transition",
                   detail=json.dumps({"from": current, "to": args.status}))
+    if args.status == "ready":
+        # Advisory, never blocking. `ats_min_score` is the bar /prepare
+        # regenerates against; nothing used to consult it at the point an asset
+        # actually becomes sendable, so a sub-threshold asset reached `ready`
+        # indistinguishably from a good one. Sending a low scorer for a role
+        # you care about is a legitimate call — it should just not be silent.
+        floor = packs.thresholds().get("ats_min_score")
+        score = row["ats_score_det"]
+        if score is not None and floor is not None and score < floor:
+            print(f"# WARNING: {args.job_id} reaches `ready` with ats_score_det "
+                  f"{score}, below the configured ats_min_score {floor}.",
+                  file=sys.stderr)
+
     updates = {"status": args.status}
     today = date.today().isoformat()
     if args.status == "applied":
@@ -619,6 +632,18 @@ def log_event(conn, *, run_id, command, job_id, action, detail) -> None:
 
 def cmd_log(args) -> None:
     conn = connect()
+    if args.action == "run_end" and not args.allow_duplicate_run_end:
+        # One run, one ending. A second `run_end` double-counts the run in every
+        # /optimise lens that works off run boundaries, and the duplicate is
+        # usually a resumed agent re-running its own wrap-up after a stall.
+        prior = conn.execute(
+            "SELECT ts FROM events WHERE run_id=? AND action='run_end' LIMIT 1",
+            (args.run_id,)).fetchone()
+        if prior:
+            raise DbError(
+                f"run_end already logged for run `{args.run_id}` at {prior['ts']}. "
+                "A run ends once. Pass --allow-duplicate-run-end to override."
+            )
     log_event(conn, run_id=args.run_id, command=args.command_name,
               job_id=args.job_id, action=args.action, detail=args.detail)
     stamp_write(conn)
@@ -628,6 +653,7 @@ def cmd_log(args) -> None:
 
 def cmd_dashboard(args) -> None:
     conn = connect()
+    thresholds_cfg = packs.thresholds()
     today = date.today()
     today_iso = today.isoformat()
     counts = dict(conn.execute("SELECT status, COUNT(*) FROM jobs GROUP BY status").fetchall())
@@ -702,6 +728,18 @@ def cmd_dashboard(args) -> None:
         if link:
             print(f"  {link}")
 
+    # Advisory floor for the ready list; fetched once, not per row.
+    ats_floor = thresholds_cfg.get("ats_min_score")
+
+    def row_age_days(r):
+        """Days since the posting was found, or None if the date is unusable."""
+        if not r["date_found"]:
+            return None
+        try:
+            return (today - date.fromisoformat(r["date_found"][:10])).days
+        except ValueError:
+            return None
+
     def section(title, query, params=(), with_ats=False):
         rows = conn.execute(query, params).fetchall()
         if not rows:
@@ -711,7 +749,12 @@ def cmd_dashboard(args) -> None:
             meta = f"{r['priority'] or '-'} | fit {r['fit_score'] or '-'}"
             if with_ats and r["ats_score_det"] is not None:
                 meta += f" | ats {r['ats_score_det']}"
+                if ats_floor is not None and r["ats_score_det"] < ats_floor:
+                    meta += f" (below {ats_floor})"
+            age = row_age_days(r)
             meta += f" | found {r['date_found'] or '-'}"
+            if age is not None:
+                meta += f" ({age}d)"
             job_line(r, meta)
         print()
 
@@ -1166,10 +1209,12 @@ def build_parser() -> argparse.ArgumentParser:
     lg = sub.add_parser("log", help="Append an event to the run log.")
     lg.add_argument("--run-id", required=True)
     lg.add_argument("--command", dest="command_name", required=True,
-                    help="hunt | prepare | track | optimise | apply | brief | setup | other")
+                    help="hunt | prepare | track | cycle | optimise | apply | setup | other")
     lg.add_argument("--job-id")
     lg.add_argument("--action", required=True)
     lg.add_argument("--detail", help="JSON string")
+    lg.add_argument("--allow-duplicate-run-end", action="store_true",
+                    help="Permit a second run_end for a run id that already has one.")
     lg.set_defaults(func=cmd_log)
 
     d = sub.add_parser("dashboard", help="Markdown funnel + actionable lists.")

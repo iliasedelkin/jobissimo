@@ -130,6 +130,63 @@ class TestDb(unittest.TestCase):
         got = run_script("db.py", "get", "sample031", env=self.env)
         self.assertIn("follow_up_date", got.stdout)
 
+    def test_ready_below_ats_threshold_warns_but_succeeds(self):
+        """Advisory, not a gate: exit 0 AND a warning on stderr.
+
+        The threshold used to be consulted only by /prepare's regeneration
+        loop, so a sub-threshold asset became sendable indistinguishably from
+        a good one. Sending a low scorer is still allowed — it is no longer
+        silent.
+        """
+        add(self.env, "sample040", company="LowCo", title="PM", status="generated")
+        run_script("db.py", "set-field", "--job-id", "sample040",
+                   "ats_score_det", "71", env=self.env)
+        res = run_script("db.py", "set-status", "--job-id", "sample040",
+                         "--status", "ready", env=self.env)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("below the configured ats_min_score", res.stderr)
+
+        # At or above the floor there is no warning.
+        add(self.env, "sample041", company="HighCo", title="PM", status="generated")
+        run_script("db.py", "set-field", "--job-id", "sample041",
+                   "ats_score_det", "82", env=self.env)
+        ok = run_script("db.py", "set-status", "--job-id", "sample041",
+                        "--status", "ready", env=self.env)
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        self.assertNotIn("ats_min_score", ok.stderr)
+
+    def test_duplicate_run_end_is_refused(self):
+        """A run ends once; a second run_end double-counts it for /optimise."""
+        first = run_script("db.py", "log", "--run-id", "20260101_000000_cycle",
+                           "--command", "cycle", "--action", "run_end", env=self.env)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        dup = run_script("db.py", "log", "--run-id", "20260101_000000_cycle",
+                         "--command", "cycle", "--action", "run_end", env=self.env)
+        self.assertEqual(dup.returncode, 1)
+        self.assertIn("run_end already logged", dup.stderr)
+        forced = run_script("db.py", "log", "--run-id", "20260101_000000_cycle",
+                            "--command", "cycle", "--action", "run_end",
+                            "--allow-duplicate-run-end", env=self.env)
+        self.assertEqual(forced.returncode, 0, forced.stderr)
+        # Other actions are never deduped.
+        again = run_script("db.py", "log", "--run-id", "20260101_000000_cycle",
+                           "--command", "cycle", "--action", "job_checked", env=self.env)
+        self.assertEqual(again.returncode, 0, again.stderr)
+
+    def test_dashboard_shows_age_and_flags_low_ats(self):
+        """The ready list is ordered work; age and a sub-threshold score decide it."""
+        add(self.env, "sample050", company="AgeCo", title="PM", status="generated")
+        run_script("db.py", "set-field", "--job-id", "sample050",
+                   "ats_score_det", "71", env=self.env)
+        run_script("db.py", "set-status", "--job-id", "sample050",
+                   "--status", "ready", env=self.env)
+        out = run_script("db.py", "dashboard", env=self.env)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("ats 71 (below 75)", out.stdout)
+        # date_found is 2026-01-10 in the add() helper, so the age is large and
+        # positive; assert the shape rather than a value that moves daily.
+        self.assertRegex(out.stdout, r"found 2026-01-10 \(\d+d\)")
+
 
 if __name__ == "__main__":
     unittest.main()
