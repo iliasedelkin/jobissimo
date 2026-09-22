@@ -25,7 +25,8 @@ Nothing personal is ever committed.
 /apply     assisted browser form-fill from profile + finals (stretch;
            NEVER submits autonomously)
               ↓
-/track     natural-language outcome updates → db.py → dashboard
+/track     natural-language outcome updates + mail reconciliation → db.py
+           → dashboard (follow-ups live here too)
               ↓
 /optimise  events + funnel + run reports + gap_suggestions → evidence-backed
            improvement diffs to config/profile/pack (user approves per item)
@@ -34,7 +35,8 @@ Nothing personal is ever committed.
 /dashboard read-only views any time: dashboard | stats | list | get
 /refresh   liveness check on pre-application jobs → closed postings marked
            missed (employer-source evidence only; `links` mode for manual pass)
-/brief     the daily pass: mail scan → hunt → dashboard → one morning brief
+/cycle     the scheduled pass: reconcile (track + refresh) → hunt →
+           prepare the most perishable → one report, daily or weekly
 /doctor    config health, value provenance, drift detection
 ```
 

@@ -120,6 +120,21 @@ class TestConfigLayer(unittest.TestCase):
         comps = [c.lower() for c in packs.cluster_competencies("PO")]
         self.assertEqual(comps.count("backlog ownership"), 1)
 
+    def test_thresholds_default_and_override_per_key(self):
+        """A config names the keys it cares about; the rest keep engine defaults.
+
+        This is what lets a new threshold ship without breaking an install
+        whose pipeline.yaml predates it.
+        """
+        self.assertEqual(packs.thresholds()["ats_min_score"], 75)
+        self.assertEqual(packs.thresholds()["ready_wip_cap"], 8)
+        write(self.cfg / "pipeline.yaml",
+              "pack: product\nthresholds:\n  ats_min_score: 68\n")
+        resolved = packs.thresholds()
+        self.assertEqual(resolved["ats_min_score"], 68, "config wins")
+        self.assertEqual(resolved["ready_wip_cap"], 8, "unnamed key keeps its default")
+        self.assertEqual(resolved["velocity_sla_days"], 5)
+
     def test_extra_role_clusters_still_registers_a_bare_id(self):
         write(self.cfg / "pipeline.yaml", "pack: product\nextra_role_clusters: [Design]\n")
         self.assertIn("Design", packs.role_clusters())

@@ -316,6 +316,30 @@ def location_fit_values() -> list:
     return ["match", "remote_ok", "relocation_eu", "relocation_non_eu", "reject"]
 
 
+# Engine defaults for config/pipeline.yaml -> thresholds. A config file may
+# override any of these per key; keys it does not name keep the default, so a
+# pre-existing install never breaks when a new threshold is added here.
+THRESHOLD_DEFAULTS = {
+    "ats_min_score": 75,
+    "shortlist_depth_cap": 25,
+    "adaptive_fit_bar": 4.0,
+    "velocity_sla_days": 5,
+    "ready_wip_cap": 8,
+    "prepare_per_cycle": 2,
+    "stale_pre_application_days": 21,
+}
+
+
+def thresholds() -> dict:
+    """Pipeline thresholds: engine defaults, overridden per key by config."""
+    resolved = dict(THRESHOLD_DEFAULTS)
+    configured = load_config("pipeline").get("thresholds")
+    if isinstance(configured, dict):
+        for key, value in configured.items():
+            resolved[str(key)] = value
+    return resolved
+
+
 def figure_nouns() -> list:
     nouns = pack_yaml().get("figure_nouns")
     if isinstance(nouns, list) and nouns:

@@ -84,7 +84,7 @@ tier3:
   - {slug: f6s, name: F6S, url: "https://www.f6s.com/jobs", kind: portal,
      access: "broad startup board; filter carefully"}
 
-# Job-alert sender domains — the mail-discovery phase (hunt Step 0b / brief)
+# Job-alert sender domains — the mail-discovery phase (hunt Step 0b / cycle)
 # restricts alert scanning to these senders. Keep in sync with the boards
 # above; /optimise proposes additions when alert mail arrives from a new
 # board the install actually uses.

@@ -34,10 +34,30 @@ proceed regardless. `/hunt` never pulls, pushes, or blocks on sync state; only
   one-time criteria loosening described in `/setup`'s first-result milestone —
   once, naming the axis and the value, never silently.
 - `time_budget_min` – wall-clock ceiling for the whole run (default **45**;
-  a scheduled `/brief` run may set its own). On reaching the budget, stop the
-  source loop where it is, finish the job currently in flight, and go
-  straight to §4 Wrap-up with whatever has been collected. A short run that
-  reports is worth more than a complete run that misses the window.
+  a scheduled `/cycle` run sets its own from its intensity profile). On
+  reaching the budget, stop the source loop where it is, finish the job
+  currently in flight, and go straight to §4 Wrap-up with whatever has been
+  collected. A short run that reports is worth more than a complete run that
+  misses the window.
+- `--orchestrated` – this hunt is one phase of a larger pass; see below.
+
+## Orchestrated mode
+
+`/cycle` runs this command as its phase 3. The orchestrator already owns the
+run id, the lock, the clock and the report, so **suppress the bookkeeping that
+would collide with it** and do only the work:
+
+| Do | Skip |
+|---|---|
+| §1's config/positioning reads, the `db.py urls` load, and the adaptive intake rule | §1's own `RUN_ID` and `run_start` — use the caller's `$RUN_ID` |
+| §2 Source loop in full | — |
+| §3a–3e per qualifying posting, including every per-job `job_processed` / `job_failed` log line | — |
+| Hand your counts back to the caller | §4's `run_end`, §4's `runs/{RUN_ID}.md`, and the Stdout summary |
+
+Everything else is unchanged — the skip rules, the dedupe gate, the
+verbatim-JD acceptance check and the truth rules are not relaxed because a
+caller is driving. `--first-run` is the same pattern from the other direction:
+a caller switching sections off, not a different hunt.
 
 ## Hard rules
 
@@ -131,10 +151,14 @@ source; prioritise them after the primary portal. Generic aggregators start
 on probation (see `config/boards.yaml` tier notes).
 
 **Tier 2 (probe rotation):** each run, probe at most ONE tier-2 board,
-rotating; log the probe in the run report even when barren. Two consecutive
-barren probes move the board to tier 3 (via a `/optimise`-proposed edit to
-`config/boards.yaml`). The rotation keeps new-source discovery alive at a
-fixed cost.
+rotating; log the probe in the run report even when barren, with its outcome
+as one of `barren | permission_denied | error`. Two consecutive barren probes
+move the board to tier 3 (via a `/optimise`-proposed edit to
+`config/boards.yaml`). **Only `barren` counts toward that** — a probe the
+browse adapter was refused (`permission_denied`, see the adapter's Failure
+modes) or that errored is not evidence about the board, and naming the domain
+in the run report is the useful output. The rotation keeps new-source
+discovery alive at a fixed cost.
 
 ### Skip a posting if
 

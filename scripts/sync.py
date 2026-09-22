@@ -141,7 +141,8 @@ def events_summary_since(iso_ts: str | None) -> str:
     KEEP = ["job_added", "job_scored", "job_shortlisted", "job_prepared",
             "status_change", "job_applied", "follow_up_generated"]
     parts = []
-    for cmd in ("hunt", "prepare", "track", "apply", "brief", "optimise"):
+    # "brief" stays for the historical rows it wrote before /cycle replaced it.
+    for cmd in ("cycle", "hunt", "prepare", "track", "apply", "brief", "optimise"):
         if cmd not in by_cmd:
             continue
         c = by_cmd[cmd]

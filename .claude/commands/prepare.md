@@ -16,6 +16,11 @@ One of:
   real posting the user chose, never a sample.
 - **default (no input):** every job with `status = shortlisted`
 
+`--limit N` caps how many jobs this run prepares, after the selection above.
+An orchestrator (`/cycle`) uses it to advance only the most perishable jobs;
+interactively it is how you stop a long shortlist becoming a long run. When
+`--limit` truncates the candidate list, say which jobs were left and why.
+
 Find candidates with `python3 scripts/db.py list --status shortlisted [...filters]`.
 
 The user may also paste open-ended application-form questions for a job
@@ -71,6 +76,19 @@ install line for the platform (`brew install pandoc` / `sudo apt install
 pandoc` / `winget install JohnMacFarlane.Pandoc`). The user then decides
 whether to install first or generate now and export later — both are fine.
 What is not fine is discovering it after the whole chain has been paid for.
+
+**Work-in-progress check, before generating anything.** Count `status =
+ready` (`db.py dashboard`, or `db.py list --status ready`). At or above
+`config/pipeline.yaml → thresholds.ready_wip_cap`, say so before you start:
+
+> Ready queue is at {N}/{cap}; {oldest} has been ready {D} days. Generating
+> another asset adds to a backlog, it does not reduce one.
+
+Interactively that is a warning — the user may have a good reason, and
+proceeds if they say so. Under an orchestrator it is a hard skip, which
+`/cycle` phase 4 handles on its own side. Either way, never let a run
+generate into a full queue silently: prepared work lost to a closed posting
+is this pipeline's largest measured waste.
 
 ```bash
 RUN_ID="$(date +%Y%m%d_%H%M%S)_prepare"
@@ -294,17 +312,13 @@ python3 scripts/db.py set-status --job-id <id> --status ready --run-id $RUN_ID
 Log per-job event: `--action job_prepared --detail
 '{"audit":"pass","ats_det":82,"ats_llm":"B","iterations":1,"duration_s":300}'`.
 
-## Overdue follow-up sweep (always, at the end)
+## Follow-ups are not this command's job
 
-For every job where `status = applied`, `follow_up_date <= today`, and no
-`follow_up.md` exists in its `application_folder`: generate `follow_up.md`
-(60–100 words: reference role + date applied; one fit sentence from
-notes.md § Emphasize if contacted; polite close). Log
-`--action follow_up_generated`.
-
-Find them: `python3 scripts/db.py list --status applied` then check
-`follow_up_date` via `db.py get`. The dashboard's "overdue follow-ups"
-section lists them directly.
+Overdue follow-ups belong to `/track` § Follow-ups, which owns the warm-channel
+rule, the drafting steps and the send confirmation. This command used to sweep
+for them too, which meant a pass that ran both generated every draft twice. If
+the dashboard shows overdue follow-ups, say so in one line and point at
+`/track follow-ups`.
 
 ## Wrap-up
 
@@ -320,7 +334,7 @@ Prepared: N applications
 ...
 Pending user decisions: K (listed above, fix/bypass/halt)
 Application answers drafted: Q (application_answers.md – review before sending)
-Follow-ups generated: Z
 Skipped (REJECT at evaluation): W
+Not prepared this run: Y (--limit, or ready queue at cap)
 Run report: runs/{RUN_ID}.md
 ```

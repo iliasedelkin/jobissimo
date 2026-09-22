@@ -24,12 +24,35 @@
         "ats_min_score": {"type": "integer", "default": 75, "description": "Deterministic ATS score below which /prepare regenerates (max 2 iterations)."},
         "shortlist_depth_cap": {"type": "integer", "default": 25, "description": "Adaptive intake: above this many shortlisted+ready, /hunt raises the fit bar and halves target_count."},
         "adaptive_fit_bar": {"type": "number", "default": 4.0},
-        "velocity_sla_days": {"type": "integer", "default": 5, "description": "Prepare-and-apply window for high-fit jobs before liveness must be re-verified."}
+        "velocity_sla_days": {"type": "integer", "default": 5, "description": "Prepare-and-apply window for high-fit jobs before liveness must be re-verified."},
+        "ready_wip_cap": {"type": "integer", "default": 8, "description": "At or above this many `ready` rows, /cycle skips its prepare phase and reports the backlog. Generating assets faster than they are sent is what loses prepared work to closed postings."},
+        "prepare_per_cycle": {"type": "integer", "default": 2, "description": "Ceiling on new application folders per scheduled /cycle pass."},
+        "stale_pre_application_days": {"type": "integer", "default": 21, "description": "A shortlisted/generated/ready row older than this gets a /refresh liveness re-check before more work is spent on it."}
       }
     },
     "extra_role_clusters": {
       "type": "array", "items": {"type": "string"},
       "description": "Cluster ids added on top of the pack's roles.yaml."
+    },
+    "cycle": {
+      "type": "object",
+      "description": "Scheduled profiles for /cycle. /optimise proposes calibrated values from what runs actually cost; the user approves.",
+      "properties": {
+        "default_intensity": {"type": "string", "default": "daily", "description": "Profile used when /cycle is invoked without --intensity."},
+        "intensities": {
+          "type": "object",
+          "description": "Named profiles, e.g. daily and weekly.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "hunt_target": {"type": "integer", "description": "Qualifying postings to collect in the hunt phase."},
+              "prepare_count": {"type": "integer", "description": "Application folders to generate, subject to ready_wip_cap."},
+              "time_budget_min": {"type": "integer", "description": "Wall-clock ceiling for the whole pass."},
+              "liveness_sweep": {"enum": ["stale_only", "all"], "description": "stale_only re-checks pre-application rows past stale_pre_application_days; all runs /refresh's full default selection."}
+            }
+          }
+        }
+      }
     },
     "location_fit_values": {
       "type": "array", "items": {"type": "string"},
