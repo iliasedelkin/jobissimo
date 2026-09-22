@@ -230,9 +230,17 @@ run, then apply per job):
   fit < 3.5 or any reject signal → `no` (+ one-sentence `rejection_reason`
   citing the rule section; for the 3.0–3.4 band cite "below capacity bar").
   Exception: referral or direct-recruiter-contact jobs enter regardless of fit.
-- Priority: `high` if fit ≥ 4.5, location match, and recommendation `yes`;
-  `low` if fit < 3.5; else `medium`. A `maybe` recommendation caps priority
-  at `medium`; a `stretch_up` seniority also caps at `medium`.
+- Priority: `high` if fit ≥ 4.5, `location_fit` ≠ `reject`, and recommendation
+  `yes`; `low` if fit < 3.5; else `medium`. A `maybe` recommendation caps
+  priority at `medium`; a `stretch_up` seniority also caps at `medium`.
+  **Relocation does not cap priority.** A role the user would move for is not
+  intrinsically lower priority than one down the road — the rubric (pack
+  `evaluation.md` §7) already prices relocation friction into `fit_score`, so
+  gating `high` on an exact location match would apply the same penalty twice:
+  once as a score deduction, then again as a hard ceiling. A relocation role
+  that still clears 4.5 *after* the score penalty has earned `high`. Location
+  the user genuinely cannot satisfy is `location_fit: reject`, which is
+  excluded here and skipped in §2 — that is the gate, not priority.
 - **Same-company concurrency (conversion policy):** at most ONE in-flight
   application (`applied`/`responded`) per company. A new `yes`/`maybe` role at
   a company with one in flight is scored and recorded normally, then put on
