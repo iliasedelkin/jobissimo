@@ -11,7 +11,7 @@ identity:
 mail:
   # The ONLY mailbox the pipeline may read. The mail account guard verifies
   # this before reading a single message. Leave unset if you have no mail
-  # adapter — /hunt and /brief just skip their mail phases.
+  # adapter — /hunt and /cycle just skip their mail phases.
   account: you.pipeline@example.com
 
 thresholds:
@@ -19,6 +19,23 @@ thresholds:
   shortlist_depth_cap: 25  # above this, /hunt raises the fit bar and halves target_count
   adaptive_fit_bar: 4.0
   velocity_sla_days: 5     # prepare-and-apply window for high-fit jobs
+  # Work-in-progress limits. Generating assets faster than you send them is
+  # the failure mode these exist to stop: a prepared application whose posting
+  # closes before you apply is the most expensive thing the pipeline can do.
+  ready_wip_cap: 8              # at/above this many `ready` rows, /cycle stops
+                                # generating and reports the backlog instead
+  prepare_per_cycle: 2          # ceiling on new folders per scheduled pass
+  stale_pre_application_days: 21  # older pre-application rows get a liveness
+                                  # re-check before more work is spent on them
+
+# /cycle's scheduled profiles. One command, two cadences: run it daily while
+# you are hunting hard, weekly when you are not. /optimise proposes calibrated
+# numbers once a few runs have recorded what one actually costs.
+cycle:
+  default_intensity: daily
+  intensities:
+    daily:  {hunt_target: 10, prepare_count: 2, time_budget_min: 75,  liveness_sweep: stale_only}
+    weekly: {hunt_target: 20, prepare_count: 4, time_budget_min: 120, liveness_sweep: all}
 
 # Optional: extra role clusters on top of the pack's roles.yaml. This form
 # registers the id only. To give a cluster its own competencies — or to extend

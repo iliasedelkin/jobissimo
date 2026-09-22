@@ -12,7 +12,11 @@ apply only the approved ones.
 - the full `events` table: `python3 scripts/db.py export-csv --out profile/state/backup`
   then read `events.csv` (and `jobs.csv` for the funnel)
 - `python3 scripts/db.py dashboard` (current funnel)
-- every `runs/*.md` run report
+- every `runs/*.md` run report — `cycle_*.md` and the legacy
+  `morning_brief_*.md` alike. `/brief` was replaced by `/cycle` on 2026-09-22;
+  historical runs are logged with `--command brief` and current ones with
+  `--command cycle`, so any per-command breakdown must count both or it will
+  report a cliff that is a rename, not a change in behaviour.
 - every previous `reports/optimiser_*.md` (don't re-propose rejected ideas;
   check whether previously applied changes moved the numbers)
 - `reports/pending_suggestions.md` – improvement proposals queued by runs that

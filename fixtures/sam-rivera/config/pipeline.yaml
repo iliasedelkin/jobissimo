@@ -10,3 +10,11 @@ thresholds:
   shortlist_depth_cap: 25
   adaptive_fit_bar: 4.0
   velocity_sla_days: 5
+  ready_wip_cap: 8
+  prepare_per_cycle: 2
+  stale_pre_application_days: 21
+cycle:
+  default_intensity: daily
+  intensities:
+    daily:  {hunt_target: 10, prepare_count: 2, time_budget_min: 75,  liveness_sweep: stale_only}
+    weekly: {hunt_target: 20, prepare_count: 4, time_budget_min: 120, liveness_sweep: all}

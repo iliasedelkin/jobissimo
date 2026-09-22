@@ -3,7 +3,7 @@
 No mail capability in the session. This is a supported configuration, not an
 error:
 
-- `/hunt` and `/brief` skip their mail phases and say so in the run report
+- `/hunt` and `/cycle` skip their mail phases and say so in the run report
   (`MAIL SKIPPED — no mail tool in session`), then continue with the portal
   sweep / watchlist / manual URLs.
 - Job-alert digests can still feed the pipeline manually: the user forwards

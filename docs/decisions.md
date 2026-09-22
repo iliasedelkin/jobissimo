@@ -182,6 +182,52 @@ Part 2 retrofit of this machine (done):
   export as part of preparing the preview; it only skips the commit. Deferred
   polish — make the preview fully side-effect-free.
 
+## /brief becomes /cycle (2026-09-22)
+
+`/brief` was a reporting pass: mail scan, hunt, dashboard. Both of its working
+phases *added* to the pipeline and neither advanced anything through it. One
+install's telemetry over four months made the consequence measurable — assets
+reaching `ready` at roughly twice the rate they were applied, with a large body
+of fully prepared, ATS-scored work lost to postings that closed first — and
+`/brief` itself ran three times against `/hunt`'s fifty-seven, so as a daily
+habit it had not taken either.
+
+`/cycle` replaces it with *reconcile → hunt → advance → report*, and inherits
+every survival rule `/brief` had paid for (skeleton-first, no phase aborts the
+run, persisted-epoch clock checks, the single-run lock released by overwriting
+its marker, mandatory `run_end`, starvation bail-out). What is new:
+
+- **It advances.** A prepare phase that takes the 1–2 most perishable
+  shortlisted jobs, ordered by posting age rather than fit score — the fit
+  gradient proved flat across 55 applications, while freshness was what the
+  missed jobs had in common. Skipped entirely above `thresholds.ready_wip_cap`.
+- **It reconciles.** Mail → lifecycle state, plus a `/refresh` liveness sweep
+  of stale pre-application rows. This is the first scheduled pass allowed to
+  write lifecycle state, so the auto-apply bar is deliberately narrow and lives
+  in `/track` § Mail reconciliation, not in `/cycle`.
+- **It is an orchestrator, not a superset.** Every phase delegates to the
+  command that owns that job. Writing mail, scoring or generation logic into
+  `cycle.md` is the thing to resist — `/brief` being the only definition of the
+  mail phase is exactly how that responsibility got misplaced the first time.
+
+Deliberate consequences:
+
+- `brief.md` is **deleted, not aliased.** A stale scheduled `/brief` fails
+  loudly instead of silently running the old shape. The name is now free for
+  `/brief <job_id>` (interview prep), which is what the word most naturally
+  means once there are live interview threads.
+- Historical runs stay logged as `--command brief` and their reports keep the
+  `morning_brief_*.md` name. Nothing in `events` was rewritten; `/optimise` and
+  `sync.py` read both names, so a per-command breakdown does not report a cliff
+  that is a rename.
+- The overdue follow-up sweep was **removed from `/prepare`**; `/track` owns
+  follow-ups. A pass running both used to draft every follow-up twice.
+  Standalone `/prepare` runs no longer generate them.
+
+Left for later: the `/optimise` lens that proposes calibrated intensity
+profiles. `/cycle` records what each run cost against its targets from day one,
+but there is nothing to calibrate against until it has run a few times.
+
 ## Deferred improvements (behaviour left as-is on purpose)
 
 - `coverage.py`'s profile strength score is deliberately blunt (movement, not

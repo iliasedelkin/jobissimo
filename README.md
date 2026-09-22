@@ -40,7 +40,7 @@ export, and it is not configurable.
 /enrich    answer the highest-impact profile gaps in five minutes
 /dashboard read-only pipeline views any time
 /refresh   liveness check on open postings; mark dead ones missed
-/brief     the daily pass: mail scan → hunt → dashboard → one morning brief
+/cycle     the scheduled pass: reconcile → hunt → prepare → one report
 /doctor    config health, value provenance, drift detection
 ```
 
@@ -114,7 +114,7 @@ Next: /hunt · /enrich · /dashboard
 | `/optimise` | Analyze telemetry; propose approved-per-item improvements |
 | `/dashboard` | Read-only funnel, stats, lists, single-job views |
 | `/refresh` | Verify open postings are still live; mark dead ones missed |
-| `/brief` | The daily pass: mail scan → hunt → dashboard → one brief |
+| `/cycle` | The scheduled pass: reconcile, hunt, prepare, one report (daily or weekly) |
 | `/doctor` | Config health, value provenance, drift detection |
 
 ## How it works
