@@ -131,10 +131,14 @@ source; prioritise them after the primary portal. Generic aggregators start
 on probation (see `config/boards.yaml` tier notes).
 
 **Tier 2 (probe rotation):** each run, probe at most ONE tier-2 board,
-rotating; log the probe in the run report even when barren. Two consecutive
-barren probes move the board to tier 3 (via a `/optimise`-proposed edit to
-`config/boards.yaml`). The rotation keeps new-source discovery alive at a
-fixed cost.
+rotating; log the probe in the run report even when barren, with its outcome
+as one of `barren | permission_denied | error`. Two consecutive barren probes
+move the board to tier 3 (via a `/optimise`-proposed edit to
+`config/boards.yaml`). **Only `barren` counts toward that** — a probe the
+browse adapter was refused (`permission_denied`, see the adapter's Failure
+modes) or that errored is not evidence about the board, and naming the domain
+in the run report is the useful output. The rotation keeps new-source
+discovery alive at a fixed cost.
 
 ### Skip a posting if
 

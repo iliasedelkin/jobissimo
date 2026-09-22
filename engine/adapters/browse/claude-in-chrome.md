@@ -10,12 +10,25 @@ Capabilities: `listings.search` (portal search pages), `jd.fetch` (full
 verbatim postings, including login-walled boards), `form.inspect` (read-only
 question capture on application forms).
 
-Probe at session start: one `tabs_context_mcp` call, **before** any other
-work. The MCP being dead costs up to 180 s to discover — spend that while the
-time budget is untouched, and record the outcome as a `browser_probe` event so
-`/optimise` can count availability. On failure, degrade: mail + manual URLs
-still work; write surviving candidate URLs into the run report as a
-ready-to-run list.
+## Failure modes
+
+**The MCP is dead.** Probe at session start: one `tabs_context_mcp` call,
+**before** any other work. Discovering this the slow way costs up to 180 s —
+spend that while the time budget is untouched, and record the outcome as a
+`browser_probe` event so `/optimise` can count availability. On failure,
+degrade: mail + manual URLs still work; write surviving candidate URLs into
+the run report as a ready-to-run list.
+
+**The domain is not permitted.** The tool returns `Navigation to this domain
+is not allowed` *before* the page is fetched, because the extension grants
+site access per domain. Cost is one wasted call per attempt, and the failure
+is invisible to every liveness signal the pipeline has — including `/refresh`,
+which never sees a response to classify. Record it as a distinct
+`permission_denied` reason on the `portal_probe` or `job_failed` event, never
+as "barren" or "dead": **a board the agent was never allowed to open is not
+evidence about the board**, and must not count toward a tier demotion. The fix
+is outside the pipeline — the user grants the domain site permission in the
+extension — so name the domain in the run report rather than retrying it.
 
 ## Field notes: LinkedIn extraction
 
