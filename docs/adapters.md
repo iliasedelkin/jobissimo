@@ -20,6 +20,7 @@ mail.search(query, since_days)             → [{id, subject, body}]      # read
 | Adapter | Gets you | Costs you |
 |---|---|---|
 | `claude-in-chrome` | Logged-in sessions; cheap guest-endpoint extraction; batched digest triage | Requires that MCP and a real browser |
+| `codex-chrome` | The same, for Codex — its Chrome/Browser plugin drives your logged-in Chrome | Requires the Codex browser extension and a real browser |
 | `playwright` | Headless, server-friendly | No logged-in sessions; login-walled boards degrade |
 | `webfetch` | Zero dependencies; company career pages + public Ashby/Greenhouse/Lever board APIs (stable, documented, verbatim) | No search-results harvesting; company-direct only |
 | `manual` | You paste URLs or JD text; the whole prepare→audit→score→export chain is unaffected. A first-class path — also the ToS-safest mode | No discovery |

@@ -9,5 +9,5 @@ tools:
   pdftotext: false      # PDF -> text at intake (OCR fallback if absent)
 
 adapters:
-  browse: claude-in-chrome   # claude-in-chrome | playwright | webfetch | manual
+  browse: claude-in-chrome   # claude-in-chrome | codex-chrome | playwright | webfetch | manual
   mail: gmail-mcp            # gmail-mcp | imap | none

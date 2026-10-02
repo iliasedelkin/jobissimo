@@ -113,12 +113,14 @@ discover it at their next `git pull`.
 Probe before asking anything: `python3 scripts/setup_check.py` plus direct
 checks — `python3 --version`, `pandoc -v`, a PDF engine
 (tectonic/xelatex/libreoffice), `pdftotext`, and which agent capabilities
-exist in this session (a browser MCP, a mail tool, web fetch, OCR). Write
+exist in this session (a browser MCP or plugin, a mail tool, web fetch, OCR;
+with no fetch tool, whether the shell can reach the network — one
+`curl -sI https://api.lever.co` — which decides if `webfetch` is usable). Write
 `config/capabilities.yaml`:
 
 ```yaml
 tools: {pandoc: true, pdf_engine: false, pdftotext: true}
-adapters: {browse: claude-in-chrome | playwright | webfetch | manual, mail: gmail-mcp | imap | none}
+adapters: {browse: claude-in-chrome | codex-chrome | playwright | webfetch | manual, mail: gmail-mcp | imap | none}
 ```
 
 Show an honest degradation table — e.g. *"no browser adapter found: discovery

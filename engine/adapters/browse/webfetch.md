@@ -6,6 +6,11 @@ APIs. No search-results harvesting — this adapter is **company-direct only**,
 which the pipeline's own telemetry ranks as the highest-converting source
 class anyway.
 
+Agents without a URL-fetching tool (Codex, for one) run this adapter from the
+shell — `curl` or `python3` `urllib` — which needs the shell to have network
+access (in Codex: `network_access = true`, see `docs/codex.md`). `/setup` S0
+probes that with one request; no network → fall back to `manual`.
+
 ## Public ATS board APIs (authoritative and verbatim)
 
 These are documented, public, no-auth endpoints; a job present in the API is

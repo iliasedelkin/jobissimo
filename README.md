@@ -4,9 +4,10 @@ An agent-operated job-search pipeline: it finds postings, scores them for fit,
 generates truth-audited ATS-optimized applications, tracks outcomes, and
 improves itself from its own telemetry. Plain-markdown slash commands hold the
 judgement; a handful of deterministic Python scripts hold anything that must be
-exact — lifecycle state, truth auditing, ATS scoring, export. Built for
-[Claude Code](https://claude.com/claude-code); runnable by any capable LLM
-agent.
+exact — lifecycle state, truth auditing, ATS scoring, export. Runs in
+[Claude Code](https://claude.com/claude-code) and
+[Codex](https://developers.openai.com/codex) from the same files; runnable by
+any capable LLM agent.
 
 ## The principle
 
@@ -55,25 +56,32 @@ are validated by `scripts/db.py`; `closed` carries an outcome
 - **[pandoc](https://pandoc.org/)** for DOCX export; an optional PDF engine
   ([tectonic](https://tectonic-typesetting.github.io/), xelatex, or
   LibreOffice) for PDF. Neither is required to run the pipeline or the tests.
-- **An LLM agent** to run the commands — designed for Claude Code.
+- **An LLM agent** to run the commands — Claude Code or Codex (see
+  [Running with Codex](#running-with-codex)).
 - **A browser is optional.** Discovery works through a logged-in browser, a
   headless one, plain HTTP fetch (company career pages + public ATS board
   APIs), or fully manual URL paste — whichever your session has.
 
 ## Install
 
+New to all this? **[docs/getting-started.md](docs/getting-started.md)** walks
+through everything, from installing Claude Code or Codex to connecting the
+browser and mail to the first `/setup`. The short version, for an agent you
+already have:
+
 ```sh
 git clone https://github.com/iliasedelkin/jobissimo.git
 cd jobissimo
 python3 scripts/scrub_check.py --install-hook      # PII pre-commit gate
 python3 -m unittest discover -s tests -p 'test_*.py'   # optional: verify offline
-claude                                              # or your agent of choice
+claude                                              # or: codex
 ```
 
 Then, inside the agent:
 
 ```
-/setup
+/setup          # Claude Code
+$setup          # Codex
 ```
 
 ## First run
@@ -103,6 +111,9 @@ Next: /hunt · /enrich · /dashboard
 
 ## Commands
 
+Claude Code takes them as `/name`, Codex as `$name`. Arguments are the same
+(`/prepare 0123` ≙ `$prepare 0123`).
+
 | Command | What it does |
 |---|---|
 | `/setup` | Configure the pipeline from your own documents; reach a first result |
@@ -116,6 +127,78 @@ Next: /hunt · /enrich · /dashboard
 | `/refresh` | Verify open postings are still live; mark dead ones missed |
 | `/cycle` | The scheduled pass: reconcile, hunt, prepare, one report (daily or weekly) |
 | `/doctor` | Config health, value provenance, drift detection |
+
+## Running with Codex
+
+Codex reads `AGENTS.md` (the operating contract; `CLAUDE.md` imports the same
+file) and runs each command through a thin skill in `.agents/skills/<name>/`.
+The skill points at the same `.claude/commands/<name>.md` that Claude Code
+uses, so the pipeline logic, guardrails, and scripts are identical in both
+agents. Full details: [docs/codex.md](docs/codex.md).
+
+**1. Install, then open the repo root and trust the project**
+
+```sh
+npm install -g @openai/codex  # or: brew install --cask codex — or the ChatGPT desktop app
+cd jobissimo
+codex
+```
+
+Trusting the project also loads `.codex/rules/jobissimo.rules`, so the
+pipeline scripts run without approval prompts, as in Claude Code.
+
+**2. Give Codex your workspace and the network.** Codex's default sandbox
+writes only inside the repo and blocks network access from the shell.
+`$setup` creates your workspace as a sibling directory by default
+(`python3 scripts/paths.py` prints it once it exists), and the public ATS-API
+fetches and `/sync` need the network. Add this to your personal
+`~/.codex/config.toml` before `$setup`, then restart Codex. Never commit it
+here.
+
+```toml
+[sandbox_workspace_write]
+writable_roots = ["/absolute/path/to/your/jobissimo-workspace"]
+network_access = true
+```
+
+For a single session, `codex --add-dir /absolute/path/to/workspace` does
+the same for writes.
+
+**3. Optional: browser and mail**
+
+- **Browser (ChatGPT desktop app only):** in **Computer Use**, install the
+  ChatGPT browser extension, then @-mention the browser in chat
+  (`$hunt @Chrome`). It drives your own logged-in Chrome (`codex-chrome`
+  adapter). The Codex CLI has no browser integration; a headless Playwright
+  MCP is the CLI option.
+- **Mail:** install the **Gmail** plugin and connect the mailbox that gets
+  your job alerts (read-only by contract). Otherwise use `imap` or nothing.
+
+Neither is required: without a browser, discovery runs on public ATS APIs and
+pasted URLs, and preparing applications is unaffected.
+
+**4. Run it**
+
+```
+$setup                        # once: documents → knowledge → config → first result
+$hunt                         # find and score postings
+$prepare <job_id>             # tailored, truth-audited, ATS-scored CV + letter
+$apply <job_id>               # assisted form-fill; you click submit
+$track <what happened>        # "rejected by Acme", "interview with Nimbus Friday"
+$cycle                        # or all of the above as one daily pass
+$dashboard                    # where things stand
+```
+
+Unattended: run `codex exec --sandbox workspace-write '$cycle'` from the repo
+root (see [docs/scheduling.md](docs/scheduling.md)). CLI runs have no browser,
+so the hunt uses public ATS APIs and mail.
+
+**Differences from Claude Code**
+
+- Questions come as plain chat.
+- The Chrome plugin asks before it types personal data into a form.
+- Everything else, including the truth audit and the stop before submit,
+  behaves the same.
 
 ## How it works
 

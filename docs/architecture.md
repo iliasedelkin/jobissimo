@@ -14,7 +14,7 @@ Resolution order, last wins. A layer is only written by its owner.
 
 | Layer | Holds | Written by | Committed |
 |---|---|---|---|
-| **Engine** | `scripts/`, `.claude/commands/`, `engine/rules/`, `engine/schemas/` | maintainers | yes |
+| **Engine** | `scripts/`, `.claude/commands/` (+ their Codex wrappers in `.agents/skills/`), `AGENTS.md`, `engine/rules/`, `engine/schemas/` | maintainers | yes |
 | **Pack** | `packs/<name>/` — role clusters, ATS lexicons, board catalogue, locale conventions, evaluation rubric | community PR | yes |
 | **Config** | `$JOBISSIMO_HOME/config/` — this install's identity, targets, languages, boards, capabilities | `/setup`, `/optimise` (approved) | **no** — private repo |
 | **Profile** | `$JOBISSIMO_HOME` — knowledge, positioning, every generated artefact | the user and the pipeline | **no** — private repo |
