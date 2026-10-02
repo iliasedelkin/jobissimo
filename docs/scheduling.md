@@ -4,7 +4,8 @@
 reconcile what happened, hunt, advance the most perishable jobs, and say what
 needs you today. It writes `runs/cycle_YYYY-MM-DD.md`. How you trigger it
 depends on your agent host (Claude Code's scheduled tasks, cron invoking your
-agent CLI, etc.) — this doc is about making a scheduled run *survive* and
+agent CLI — e.g. `codex exec --sandbox workspace-write '$cycle'` from the repo
+root, see `docs/codex.md` — etc.) — this doc is about making a scheduled run *survive* and
 *stay worth running*, which is where the hard lessons are.
 
 ## The two rules

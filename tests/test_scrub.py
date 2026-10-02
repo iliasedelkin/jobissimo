@@ -15,7 +15,8 @@ class TestScrub(unittest.TestCase):
 
     def test_clean_tree_passes(self):
         # scan the committed, non-profile parts of the repo
-        for d in ("scripts", "engine", "packs", "fixtures", ".claude", "templates", "docs"):
+        for d in ("scripts", "engine", "packs", "fixtures", ".claude", ".agents",
+                  ".codex", "templates", "docs"):
             p = REPO / d
             if not p.exists():
                 continue

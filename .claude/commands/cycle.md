@@ -108,8 +108,8 @@ Guards, all in the same call:
 ## 1. Browser + mail probes — spend the failure cost up front
 
 - **Browser probe first:** one cheap browse-adapter liveness call (for
-  claude-in-chrome, `tabs_context_mcp`). Dead browsers historically cost 180 s
-  to discover — spend it now, log a `browser_probe` event with the outcome so
+  claude-in-chrome, `tabs_context_mcp`; for codex-chrome, list open tabs).
+  Dead browsers historically cost 180 s to discover — spend it now, log a `browser_probe` event with the outcome so
   `/optimise` can count availability. Failure → note `BROWSER: unavailable` in
   Degradations; phase 2 runs mail-only, phase 3 is skipped, phase 4 still runs
   (generation needs no browser once a JD is on disk).

@@ -81,6 +81,13 @@ Verifying a stub for a market you know is a great first contribution:
   `audit.py` or `ats_score.py` **must ship updated fixture expectations** in
   `tests/` and say why the score/verdict moved. An unexplained score change is
   a regression, not an improvement.
+- **Commands** — a new `.claude/commands/<name>.md` also needs its Codex
+  wrapper, `.agents/skills/<name>/SKILL.md`. Copy an existing wrapper; it
+  points at the command file and holds no logic. `tests/test_agents.py`
+  enforces the pairing, and that the script allowlist in
+  `.claude/settings.json` matches `.codex/rules/jobissimo.rules`. Put
+  contract changes in `AGENTS.md` —
+  `CLAUDE.md` only imports it.
 - **Docs.**
 
 ## Public change, private evidence

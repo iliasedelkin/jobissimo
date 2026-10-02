@@ -6,7 +6,7 @@ that render without login.
 
 Costs: **no logged-in sessions.** Login-walled boards degrade to their guest
 views or are skipped; anything requiring authentication belongs to the
-claude-in-chrome adapter or the manual path.
+logged-in Chrome adapters (claude-in-chrome, codex-chrome) or the manual path.
 
 Boundaries (non-negotiable, same as every browse adapter): no captcha or
 interstitial bypass — a challenge page is logged and skipped; respect

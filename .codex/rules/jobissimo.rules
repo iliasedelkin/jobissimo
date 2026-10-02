@@ -1,0 +1,19 @@
+# Codex command rules for Jobissimo — the equivalent of the allowlist in
+# .claude/settings.json (keep the two in sync; tests/test_agents.py checks it).
+# Project-local rules load only once you trust this project in Codex.
+# scripts/sync.py is deliberately absent: it pushes to a remote, so it is
+# approved per run.
+
+prefix_rule(pattern = ["python3", "scripts/db.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/audit.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/ats_score.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/export.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/paths.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/packs.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/intake.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/competency_map.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/coverage.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/setup_check.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/scrub_check.py"], decision = "allow")
+prefix_rule(pattern = ["date"], decision = "allow")
+prefix_rule(pattern = ["pandoc", "-v"], decision = "allow")

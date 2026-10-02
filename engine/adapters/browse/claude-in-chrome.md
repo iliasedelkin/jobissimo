@@ -6,6 +6,9 @@ session** — the user is present or has explicitly scheduled the run; this is
 not a scraper. All the boundaries in `engine/adapters/README.md` apply: no
 captcha/interstitial bypass, respect rate limits, read-only forms.
 
+Setup (extension, `claude --chrome`, site access): `docs/getting-started.md`
+§ Browser.
+
 Capabilities: `listings.search` (portal search pages), `jd.fetch` (full
 verbatim postings, including login-walled boards), `form.inspect` (read-only
 question capture on application forms).

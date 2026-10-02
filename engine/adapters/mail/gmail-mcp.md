@@ -2,6 +2,10 @@
 
 Reads job-alert digests and recruiter/employer replies through a Gmail MCP
 (`search_threads`, `get_message`, `get_thread`). Capability: `mail.search`.
+The same contract covers any Gmail connector or plugin in another agent host
+(e.g. a Gmail plugin in Codex): read-only, account guard first. A host with no
+Gmail tool uses `imap` or `none`. Connecting it (claude.ai connector or Codex
+plugin): `docs/getting-started.md` § Mail.
 
 **Read-only by contract.** Never send, reply, label, archive, trash, or draft
 mail from the pipeline. Outcome changes discovered in mail go through `/track`
