@@ -651,6 +651,37 @@ def cmd_log(args) -> None:
     print(f"Logged: run={args.run_id} action={args.action}" + (f" job={args.job_id}" if args.job_id else ""))
 
 
+def cmd_last_event(args) -> None:
+    """Most recent event with this action — a read-only watermark query.
+
+    `--match key=value` filters on top-level fields of the JSON detail, so a
+    command can ask "when did I last scan *this* mailbox" without writing SQL.
+    Prints `ts<TAB>run_id<TAB>detail`, or nothing when no event matches.
+    Always exits 0 — this is a query, not a gate.
+    """
+    conn = connect()
+    wanted = {}
+    for m in args.match or []:
+        key, sep, value = m.partition("=")
+        if not sep or not key:
+            raise DbError(f"--match must be key=value, got: {m}")
+        wanted[key] = value
+    rows = conn.execute(
+        "SELECT ts, run_id, detail FROM events WHERE action=? ORDER BY ts DESC, id DESC",
+        (args.action,)).fetchall()
+    for r in rows:
+        if wanted:
+            try:
+                detail = json.loads(r["detail"] or "{}")
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(detail, dict) or any(
+                    str(detail.get(k)) != v for k, v in wanted.items()):
+                continue
+        print(f"{r['ts']}\t{r['run_id']}\t{r['detail'] or ''}")
+        return
+
+
 def cmd_dashboard(args) -> None:
     conn = connect()
     thresholds_cfg = packs.thresholds()
@@ -1216,6 +1247,13 @@ def build_parser() -> argparse.ArgumentParser:
     lg.add_argument("--allow-duplicate-run-end", action="store_true",
                     help="Permit a second run_end for a run id that already has one.")
     lg.set_defaults(func=cmd_log)
+
+    le = sub.add_parser("last-event", help="Print the most recent event for an action "
+                        "(ts<TAB>run_id<TAB>detail); empty when none. Read-only watermark query.")
+    le.add_argument("--action", required=True)
+    le.add_argument("--match", action="append", metavar="KEY=VALUE",
+                    help="Require a top-level detail field to equal VALUE. Repeatable.")
+    le.set_defaults(func=cmd_last_event)
 
     d = sub.add_parser("dashboard", help="Markdown funnel + actionable lists.")
     d.set_defaults(func=cmd_dashboard)

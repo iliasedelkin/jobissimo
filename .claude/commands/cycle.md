@@ -113,10 +113,16 @@ Guards, all in the same call:
   `/optimise` can count availability. Failure → note `BROWSER: unavailable` in
   Degradations; phase 2 runs mail-only, phase 3 is skipped, phase 4 still runs
   (generation needs no browser once a JD is on disk).
-- **Mail account guard:** verify the connected mail account matches
-  `config/pipeline.yaml → mail.account` (see the mail adapter). Mismatch or no
-  mail tool → append `MAIL SKIPPED — <reason>` to Degradations and skip the
-  mail half of phase 2. Do not block: the liveness half still runs.
+- **Mail probe:** run the mail adapter's loaded-tool check, then its account
+  guard (`engine/adapters/mail/<adapter>.md` — it owns the retry rule and the
+  skip reasons) and log `mail_probe` / `mail_skipped` as it specifies. Phases
+  2a and 3 reuse this result; they do not probe again. Any skip → append
+  `MAIL SKIPPED — <reason>` to Degradations and skip the mail half of phase 2
+  and the mail step of phase 3. Do not block: the liveness half still runs.
+  **`tools_not_loaded` is also a headline item**, not only a degradation:
+  put the adapter's one-line fix directly under the report's headline, since
+  it is configured mail the user believes is being read, and every run that
+  buries it loses mail.
 - **Starvation check:** phases 0–1 are about a minute of real work; if elapsed
   is already ≥5 min, finalise now with `STATUS: starved`, log `run_end`
   (`reason: host_starvation`), release the lock, stop.
@@ -229,7 +235,8 @@ Then fill the two written sections:
 2. If the queue is empty, say so plainly; that is a good day.
 
 **`## Headline`** — 2–3 sentences: what was reconciled, what was found, what
-needs the user today.
+needs the user today. If phase 1 found the mail tools not loaded, the
+adapter's one-line fix comes first, before those sentences.
 
 Rewrite `STATUS:` to `complete` or `partial — <what failed>`, then write
 `runs/{RUN_ID}.md` per `/hunt` §4 — durations from the events table, not
@@ -248,6 +255,7 @@ user approves.
 ## Stdout summary (always end with this)
 
 ```
+{only if mail tools not loaded: the adapter's one-line fix}
 Cycle: runs/cycle_{date}.md  [{STATUS}]  ({intensity}, {E} min)
 Reconciled: A applied, P proposed for you   Marked missed: X
 New jobs: F found, M shortlisted
