@@ -106,18 +106,27 @@ board, search results, or a listing, harvest qualifying postings there before
 navigating anywhere.
 
 **Step 0b – mail hunt inbox.** Pipeline mail account:
-**`config/pipeline.yaml → mail.account` only.** Before touching mail, verify
-the connected account per the mail adapter's account guard – if a different
-account is connected, skip this step entirely and tell the user which account
-was found. If a mail tool is available, search recent mail (last 14 days) for
-(a) messages whose **subject contains "hunt" or "/hunt"** (job-alert emails
-the user forwards or labels for the pipeline) and (b) job-alert mail from the
-sender domains in the pack's `boards.yaml → alert_sender_domains`. For each
-match: extract every job-posting link from the body, then process each link
-as a user-supplied URL per §3 (dedupe against `db.py urls` first; source slug
-from the destination board, or a company slug for direct career pages).
-These count toward `target_count`. Read-only: never send, reply, label, or
-delete mail. No mail tool available → skip silently and continue.
+**`config/pipeline.yaml → mail.account` only.** Before touching mail, run
+the mail adapter's loaded-tool check and account guard
+(`engine/adapters/mail/<adapter>.md`; `/cycle` has already run both — reuse
+its result). A different account connected → skip this step entirely and tell
+the user which account was found. Otherwise search recent mail (last 14 days)
+for (a) messages whose **subject contains "hunt" or "/hunt"** (job-alert
+emails the user forwards or labels for the pipeline), (b) job-alert mail from
+the sender domains in the pack's `boards.yaml → alert_sender_domains`, and
+(c) forwards from `mail.forwarders` whose **original** sender (parsed per the
+adapter's § Forwarded mail) is in `alert_sender_domains` — a forwarded digest's
+envelope sender is the user, so (b) never sees it. For each match: extract
+every job-posting link from the body, then process each link as a
+user-supplied URL per §3 (dedupe against `db.py urls` first; source slug from
+the destination board, or a company slug for direct career pages). These
+count toward `target_count`. Read-only: never send, reply, label, or delete
+mail.
+
+When mail is skipped, how loudly depends on why (adapter § Is the tool
+loaded?): `mail: none` → skip quietly and continue. A configured adapter whose
+tools are **not loaded** → continue the hunt, but put the one-line fix at the
+**top** of the output and log `mail_skipped {"reason":"tools_not_loaded"}`.
 
 Digest handling (huge bodies, spilled vs inline, grep patterns, id
 canonicalisation) is documented in

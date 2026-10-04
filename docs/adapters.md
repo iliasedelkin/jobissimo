@@ -34,7 +34,9 @@ recipe) are in `engine/adapters/browse/`.
 never sends, replies, labels, or deletes. The **account guard** verifies the
 connected mailbox matches `config/pipeline.yaml → mail.account` before
 reading a single message; reading a different mailbox is a privacy decision
-only you can make.
+only you can make. Transient probe errors are retried twice; a mismatch or a
+denial never is. Mail forwarded in from `mail.forwarders` is read through its
+forwarded header block. Details: `engine/adapters/mail/gmail-mcp.md`.
 
 ## Export adapter
 

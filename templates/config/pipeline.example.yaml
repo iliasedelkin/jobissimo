@@ -13,6 +13,12 @@ mail:
   # this before reading a single message. Leave unset if you have no mail
   # adapter — /hunt and /cycle just skip their mail phases.
   account: you.pipeline@example.com
+  # Addresses you forward job mail FROM into that mailbox. A forward is read
+  # through its forwarded header block (original sender, date, subject), so a
+  # forwarded rejection can still be matched to its job. Omit if nobody
+  # forwards.
+  # forwarders:
+  #   - you@example.com
 
 thresholds:
   ats_min_score: 75        # /prepare regenerates below this (max 2 iterations)

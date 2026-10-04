@@ -235,7 +235,8 @@ Only what the contact block and `/apply` need: name, contact, links, work
 authorisation, notice period, salary floor, relocation stance. Write
 `profile/applicant_profile.yaml` (see `templates/knowledge/` for the shape)
 and `config/pipeline.yaml` (identity.name, years_experience, pack, mail
-account if a mail adapter exists). Anything the user cannot confirm is
+account if a mail adapter exists, and `mail.forwarders` if the user forwards
+job mail into it from another address). Anything the user cannot confirm is
 written with `confirm: true` so `/apply` asks before ever using it. Anything
 not needed for the first result is deferred to the queue.
 

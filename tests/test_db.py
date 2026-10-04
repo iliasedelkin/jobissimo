@@ -173,6 +173,28 @@ class TestDb(unittest.TestCase):
                            "--command", "cycle", "--action", "job_checked", env=self.env)
         self.assertEqual(again.returncode, 0, again.stderr)
 
+    def test_last_event_is_a_per_account_watermark(self):
+        """/track's mail window starts at the last scan of *this* mailbox."""
+        empty = run_script("db.py", "last-event", "--action", "mail_scanned", env=self.env)
+        self.assertEqual(empty.returncode, 0, empty.stderr)
+        self.assertEqual(empty.stdout, "")
+        for run, account in (("r1", "a@example.com"), ("r2", "b@example.com"),
+                             ("r3", "a@example.com")):
+            run_script("db.py", "log", "--run-id", run, "--command", "track",
+                       "--action", "mail_scanned",
+                       "--detail", f'{{"account":"{account}","threads":1}}', env=self.env)
+        latest = run_script("db.py", "last-event", "--action", "mail_scanned", env=self.env)
+        self.assertEqual(latest.stdout.split("\t")[1], "r3")
+        b = run_script("db.py", "last-event", "--action", "mail_scanned",
+                       "--match", "account=b@example.com", env=self.env)
+        self.assertEqual(b.stdout.split("\t")[1], "r2")
+        none = run_script("db.py", "last-event", "--action", "mail_scanned",
+                          "--match", "account=c@example.com", env=self.env)
+        self.assertEqual(none.stdout, "")
+        bad = run_script("db.py", "last-event", "--action", "mail_scanned",
+                         "--match", "account", env=self.env)
+        self.assertEqual(bad.returncode, 1)
+
     def test_dashboard_shows_age_and_flags_low_ats(self):
         """The ready list is ordered work; age and a sub-threshold score decide it."""
         add(self.env, "sample050", company="AgeCo", title="PM", status="generated")

@@ -15,7 +15,11 @@
     "mail": {
       "type": "object",
       "properties": {
-        "account": {"type": "string", "description": "The ONLY mailbox the pipeline may read. The mail account guard verifies this before reading anything."}
+        "account": {"type": "string", "description": "The ONLY mailbox the pipeline may read. The mail account guard verifies this before reading anything."},
+        "forwarders": {
+          "type": "array", "items": {"type": "string"},
+          "description": "Addresses that forward job mail into `account` (usually the user's own personal address). A message from one of these with a forward subject is read through its forwarded header block: original sender, date and subject. See engine/adapters/mail/gmail-mcp.md § Forwarded mail."
+        }
       }
     },
     "thresholds": {

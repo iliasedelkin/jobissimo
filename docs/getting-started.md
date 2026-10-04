@@ -150,7 +150,14 @@ prompted. Adapter: `gmail-mcp` (same read-only contract and account guard).
 The plugin can also archive and trash mail, but the pipeline never asks it to.
 
 **Connect the mailbox that receives your job alerts.** A dedicated mailbox
-that you forward job mail to works well. `/setup` writes it to `mail.account`.
+that you forward job mail to works well. `/setup` writes it to `mail.account`,
+and the addresses you forward from to `mail.forwarders`: a forward is then
+matched on the original sender and date in its forwarded header block, so a
+forwarded rejection still closes the right job.
+
+If a connector is configured but its tools are missing from the session (it
+connected after the session started), runs say so at the top with the fix:
+restart the session, or reconnect it from `/mcp`.
 
 **IMAP** (`imap` adapter) is for hosts with no Gmail tool. No IMAP helper
 ships with the engine yet, so it only works if your agent session already has
