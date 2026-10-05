@@ -2,6 +2,7 @@
 the clean repo. This test enforces the same thing the pre-commit hook does."""
 from __future__ import annotations
 
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -49,6 +50,33 @@ class TestScrub(unittest.TestCase):
             res = self.scan(f)
             self.assertEqual(res.returncode, 1)
             self.assertIn("job-id", res.stdout)
+
+    def _settings_local_repo(self, t: str, ignored: bool) -> Path:
+        root = Path(t)
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+        # isolate from the developer's global excludes file, which may already
+        # ignore .claude/settings.local.json
+        subprocess.run(["git", "config", "core.excludesFile", "/dev/null"],
+                       cwd=root, check=True)
+        if ignored:
+            (root / ".gitignore").write_text(".claude/settings.local.json\n")
+        (root / ".claude").mkdir()
+        leak = "real.person@" + "gmail.com"
+        (root / ".claude" / "settings.local.json").write_text(f'{{"x": "{leak}"}}\n')
+        return root
+
+    def test_ignored_settings_local_skipped(self):
+        with tempfile.TemporaryDirectory() as t:
+            root = self._settings_local_repo(t, ignored=True)
+            res = self.scan(root)
+            self.assertEqual(res.returncode, 0, res.stdout)
+
+    def test_unignored_settings_local_still_scanned(self):
+        with tempfile.TemporaryDirectory() as t:
+            root = self._settings_local_repo(t, ignored=False)
+            res = self.scan(root)
+            self.assertEqual(res.returncode, 1)
+            self.assertIn("settings.local.json", res.stdout)
 
     def test_planted_profile_handle_caught(self):
         leak = "linkedin.com/in/" + "some-real-handle"
