@@ -67,9 +67,12 @@ SKIP_DIRS = {".git", "__pycache__", "profile", "node_modules"}
 SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".pyc",
                  ".zip", ".db"}
 # Machine-local, gitignored files that legitimately hold a personal path and
-# are never committed (the workspace pointer holds an absolute $JOBISSIMO_HOME;
-# Claude Code writes `/add-dir` grants into .claude/settings.local.json).
-SKIP_NAMES = {".jobissimo", "settings.local.json"}
+# are never committed (the workspace pointer holds an absolute $JOBISSIMO_HOME).
+SKIP_NAMES = {".jobissimo"}
+# Machine-local files skipped only while git confirms they are ignored: Claude
+# Code writes `/add-dir` grants (absolute workspace paths) into
+# .claude/settings.local.json. A copy that is not ignored is scanned as usual.
+SKIP_IF_IGNORED = {"settings.local.json"}
 # scrub_check itself holds the hash list; scanning it is meaningless.
 SELF = Path(__file__).name
 
@@ -111,6 +114,17 @@ def scan_text(text: str, label: str, deny: set) -> list:
     return findings
 
 
+def git_ignored(p: Path) -> bool:
+    """True only when git positively reports `p` as ignored; outside a repo,
+    or if git is unavailable, the file counts as not ignored and is scanned."""
+    try:
+        res = subprocess.run(["git", "check-ignore", "-q", "--", p.name],
+                             cwd=p.parent, capture_output=True)
+    except OSError:
+        return False
+    return res.returncode == 0
+
+
 def iter_files(root: Path):
     if root.is_file():
         yield root
@@ -121,6 +135,8 @@ def iter_files(root: Path):
         if any(part in SKIP_DIRS for part in p.parts):
             continue
         if p.suffix.lower() in SKIP_SUFFIXES or p.name == SELF or p.name in SKIP_NAMES:
+            continue
+        if p.name in SKIP_IF_IGNORED and git_ignored(p):
             continue
         yield p
 
