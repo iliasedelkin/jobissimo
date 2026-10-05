@@ -67,8 +67,9 @@ SKIP_DIRS = {".git", "__pycache__", "profile", "node_modules"}
 SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".pyc",
                  ".zip", ".db"}
 # Machine-local, gitignored files that legitimately hold a personal path and
-# are never committed (the workspace pointer holds an absolute $JOBISSIMO_HOME).
-SKIP_NAMES = {".jobissimo"}
+# are never committed (the workspace pointer holds an absolute $JOBISSIMO_HOME;
+# Claude Code writes `/add-dir` grants into .claude/settings.local.json).
+SKIP_NAMES = {".jobissimo", "settings.local.json"}
 # scrub_check itself holds the hash list; scanning it is meaningless.
 SELF = Path(__file__).name
 
