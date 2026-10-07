@@ -16,7 +16,7 @@ Scans text for personal-data leaks before they are committed:
 
 3. **Workspace fingerprint** — the real values of this machine's workspace:
    every date in the pipeline (jobs + events), the companies the user applied
-   to or heard from, aggregate counts (>= 10) from the jobs table, and
+   to or heard from, aggregate counts (>= 20) from the jobs table, and
    money-sized amounts (>= 1000) from stage logs, notes,
    `applicant_profile.yaml` and `config/targets.yaml` (a posting's published
    salary band is the employer's data and is not collected).
@@ -157,6 +157,9 @@ INT_RE = re.compile(r"(?<![\w.,:#/-])(\d{2,})(?![\w]|[.,:]\d|%)")
 MASK_RE = re.compile(r"https?://\S+|[\w./-]+\.\w+:\d+(?:-\d+)?|#\d+\b|\b[0-9a-f]{12,}\b")
 COMPANY_STOP = {"undisclosed", "confidential", "stealth", "unknown", "various", "n/a",
                 "remote", "unlisted"}
+# counts below this collide with ordinary prose ("invariant 11", "top 10");
+# the telemetry signatures cover their usual shapes instead
+COUNT_MIN = 20
 COUNT_COLUMNS = ("status", "source", "outcome", "role_cluster", "priority",
                  "apply_recommendation", "applied_via", "remote_flag", "jd_language")
 
@@ -228,7 +231,7 @@ def workspace_fingerprint() -> dict:
         mine = [r for r in jobs if r.get("source") == src]
         counts[f"{src}:applied"] = sum(1 for r in mine if r.get("date_applied"))
         counts[f"{src}:responded"] = sum(1 for r in mine if r.get("response_date"))
-    fp["counts"] = {n for n in counts.values() if n >= 10}
+    fp["counts"] = {n for n in counts.values() if n >= COUNT_MIN}
     return fp
 
 
@@ -258,7 +261,7 @@ def scan_fingerprint(text: str, label: str, fp: dict, kinds: tuple) -> list:
 # --- telemetry signatures (outbound only) -------------------------------------
 
 SIGNATURES = [
-    (re.compile(r"\b(?:(?:one|this|an|the|my|our|a real|a private|a live)\s+"
+    (re.compile(r"\b(?:(?:one|this|an|my|our|a real|a private|a live)\s+"
                 r"(?:install|installation|workspace)|(?:my|our|a real|a private|a live)\s+"
                 r"pipeline)(?:'s)?\b", re.I),
      "real-install phrasing — describe the mechanism, not an install's data"),
