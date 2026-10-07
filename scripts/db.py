@@ -36,7 +36,7 @@ DB_PATH = paths.state_db()
 
 STATUSES = [
     "found", "scored", "discarded", "shortlisted", "generated",
-    "ready", "applied", "responded", "closed",
+    "ready", "applied", "responded", "offered", "closed",
     "on_hold", "missed", "skipped",
 ]
 
@@ -49,16 +49,34 @@ TRANSITIONS = {
     "generated": {"ready", "on_hold", "skipped", "missed", "discarded"},
     "ready": {"applied", "on_hold", "skipped", "missed"},
     "applied": {"responded", "closed", "on_hold"},
-    "responded": {"closed", "applied"},
+    "responded": {"offered", "closed", "applied"},
+    "offered": {"closed"},
     "closed": set(),
     "discarded": set(),
-    "on_hold": {"scored", "shortlisted", "generated", "ready", "applied", "responded", "closed", "skipped", "discarded"},
+    "on_hold": {"scored", "shortlisted", "generated", "ready", "applied", "responded", "offered", "closed", "skipped", "discarded"},
     "missed": {"shortlisted", "discarded"},
     "skipped": {"shortlisted", "discarded"},
 }
 
 ATS_PLATFORMS = ["greenhouse", "lever", "ashby", "workable", "smartrecruiters", "other", "unknown"]
-OUTCOMES = ["no_response", "rejected", "interview", "offer", "withdrawn"]
+# `withdrawn` = the candidate pulled out; `offer_withdrawn` = the employer took
+# an offer back. Legacy `offer` (pre-v2) is mapped to `offer_accepted` on import.
+OUTCOMES = ["no_response", "rejected", "interview",
+            "offer_accepted", "offer_declined", "offer_withdrawn", "withdrawn"]
+LEGACY_OUTCOMES = {"offer": "offer_accepted"}
+
+# Stage ledger. A row is a *gate* — a step that can be passed or failed — or,
+# with kind=offer, one figure in an offer negotiation. `seq` is per-job depth
+# with no upper limit. Scheduling, nudges and impressions stay in the
+# free-text `interview_stage` narrative.
+STAGE_KINDS = ["screen", "test", "hr", "hm", "tech", "panel", "final", "offer"]
+GATE_RESULTS = ["pending", "passed", "failed", "withdrawn"]
+OFFER_RESULTS = ["pending", "countered", "accepted", "declined", "withdrawn"]
+OFFER_BASES = ["gross_annual", "monthly", "daily_rate"]
+OFFER_PARTIES = ["employer", "candidate"]
+STAGE_COLUMNS = ["job_id", "seq", "kind", "label", "date", "result", "decided",
+                 "amount", "currency", "basis", "party", "note",
+                 "created_at", "updated_at"]
 RECOMMENDATIONS = ["yes", "maybe", "no"]
 PRIORITIES = ["high", "medium", "low"]
 REMOTE_FLAGS = ["remote", "hybrid", "onsite", "unclear"]
@@ -89,7 +107,9 @@ RESERVATION_COLUMNS = ["source", "max_n"]
 META_COLUMNS = ["key", "value"]
 
 # Bump when the CSV/table shape changes so import-csv can refuse a mismatch.
-SCHEMA_VERSION = 1
+# v2: `stages` table (+ stages.csv); offer outcomes split. v1 still imports.
+SCHEMA_VERSION = 2
+IMPORTABLE_SCHEMAS = {1, 2}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (
@@ -146,6 +166,23 @@ CREATE TABLE IF NOT EXISTS events (
     job_id TEXT,
     action TEXT NOT NULL,
     detail TEXT
+);
+CREATE TABLE IF NOT EXISTS stages (
+    job_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    label TEXT,
+    date TEXT NOT NULL,
+    result TEXT NOT NULL DEFAULT 'pending',
+    decided TEXT,
+    amount INTEGER,
+    currency TEXT,
+    basis TEXT,
+    party TEXT,
+    note TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (job_id, seq)
 );
 CREATE TABLE IF NOT EXISTS id_reservations (
     source TEXT PRIMARY KEY,
@@ -410,7 +447,7 @@ def cmd_set_status(args) -> None:
             updates["follow_up_date"] = (base + timedelta(days=7)).isoformat()
         if args.applied_via:
             updates["applied_via"] = args.applied_via
-    if args.status == "responded" and not row["response_date"]:
+    if args.status in ("responded", "offered") and not row["response_date"]:
         updates["response_date"] = args.date or today
     if args.status == "discarded" and args.reason:
         updates["rejection_reason"] = args.reason
@@ -420,6 +457,10 @@ def cmd_set_status(args) -> None:
     sets = ", ".join(f"{k}=?" for k in updates)
     conn.execute(f"UPDATE jobs SET {sets}, updated_at=? WHERE job_id=?",
                  (*updates.values(), now_iso(), args.job_id))
+    if args.status == "closed" and args.outcome:
+        closed = _resolve_on_close(conn, args.job_id, args.outcome, args.date or today)
+        if closed:
+            print(closed)
     log_event(conn, run_id=args.run_id, command="set-status", job_id=args.job_id,
               action="status_change", detail=json.dumps({"from": current, "to": args.status, **{k: v for k, v in updates.items() if k != "status"}}))
     stamp_write(conn)
@@ -481,6 +522,237 @@ def cmd_set_field(args) -> None:
     print(f"{args.job_id}.{args.field}: {old!r} -> {value!r}")
 
 
+# ---------------------------------------------------------------- stage ledger
+
+def _stage_rows(conn: sqlite3.Connection, job_id: str) -> list:
+    return conn.execute("SELECT * FROM stages WHERE job_id=? ORDER BY seq",
+                        (job_id,)).fetchall()
+
+
+def _stage_update(conn, job_id, seq, result, decided) -> None:
+    conn.execute("UPDATE stages SET result=?, decided=?, updated_at=? WHERE job_id=? AND seq=?",
+                 (result, decided, now_iso(), job_id, seq))
+
+
+def _last_pending(conn, job_id, *, offer: bool | None = None, party: str | None = None):
+    for r in reversed(_stage_rows(conn, job_id)):
+        if r["result"] != "pending":
+            continue
+        if offer is not None and (r["kind"] == "offer") != offer:
+            continue
+        if party is not None and r["party"] != party:
+            continue
+        return r
+    return None
+
+
+# outcome a closing set-status implies for the open stage row
+_CLOSE_GATE = {"rejected": "failed", "withdrawn": "withdrawn"}
+_CLOSE_OFFER = {"offer_accepted": "accepted", "offer_declined": "declined",
+                "offer_withdrawn": "withdrawn"}
+
+
+def _resolve_on_close(conn, job_id, outcome, when) -> str | None:
+    """Closing a job settles its open ledger row, so the ledger and the
+    lifecycle never disagree: a rejection fails the pending gate, an offer
+    outcome resolves the pending employer offer."""
+    if outcome in _CLOSE_GATE:
+        r = _last_pending(conn, job_id, offer=False)
+        if r:
+            _stage_update(conn, job_id, r["seq"], _CLOSE_GATE[outcome], when)
+            return f"  stage {r['seq']} ({r['kind']}): pending -> {_CLOSE_GATE[outcome]}"
+    if outcome in _CLOSE_OFFER:
+        r = _last_pending(conn, job_id, offer=True)
+        if r:
+            _stage_update(conn, job_id, r["seq"], _CLOSE_OFFER[outcome], when)
+            return f"  stage {r['seq']} (offer): pending -> {_CLOSE_OFFER[outcome]}"
+    return None
+
+
+def _move_status(conn, job_id, current, new, when, run_id, reason) -> str:
+    """Advance status as a ledger side effect, through legal transitions only."""
+    updates = {"status": new}
+    row = require_job(conn, job_id)
+    if new in ("responded", "offered") and not row["response_date"]:
+        updates["response_date"] = when
+    sets = ", ".join(f"{k}=?" for k in updates)
+    conn.execute(f"UPDATE jobs SET {sets}, updated_at=? WHERE job_id=?",
+                 (*updates.values(), now_iso(), job_id))
+    log_event(conn, run_id=run_id, command="stage", job_id=job_id, action="status_change",
+              detail=json.dumps({"from": current, "to": new, "via": reason,
+                                 **{k: v for k, v in updates.items() if k != "status"}}))
+    extra = {k: v for k, v in updates.items() if k != "status"}
+    return f"{job_id}: {current} -> {new}" + (f" ({extra})" if extra else "") + f" [{reason}]"
+
+
+STAGE_OPEN_STATUSES = ("applied", "responded", "offered", "on_hold", "closed")
+
+
+def cmd_stage_add(args) -> None:
+    conn = connect()
+    row = require_job(conn, args.job_id)
+    require_enum(args.kind, STAGE_KINDS, "kind")
+    validate_date(args.date, "--date")
+    if row["status"] not in STAGE_OPEN_STATUSES:
+        raise DbError(f"{args.job_id} is `{row['status']}` — stages are recorded once an "
+                      f"application exists ({', '.join(STAGE_OPEN_STATUSES)}).")
+    offer = args.kind == "offer"
+    offer_flags = {"--amount": args.amount, "--currency": args.currency,
+                   "--basis": args.basis, "--party": args.party}
+    if offer:
+        if args.amount is None or not args.party:
+            raise DbError("kind=offer requires --amount and --party.")
+        if args.amount <= 0:
+            raise DbError("--amount must be a positive integer.")
+        require_enum(args.party, OFFER_PARTIES, "party")
+        if args.basis:
+            require_enum(args.basis, OFFER_BASES, "basis")
+        if args.currency and not re.fullmatch(r"[A-Z]{3}", args.currency):
+            raise DbError(f"--currency must be an ISO 4217 code like EUR, got `{args.currency}`.")
+    else:
+        given = [k for k, v in offer_flags.items() if v is not None]
+        if given:
+            raise DbError(f"{', '.join(given)} only apply to kind=offer.")
+    result = args.result or "pending"
+    require_enum(result, OFFER_RESULTS if offer else GATE_RESULTS, "result")
+    decided = args.decided
+    if decided:
+        validate_date(decided, "--decided")
+    if result != "pending" and not decided:
+        decided = args.date
+
+    msgs = []
+    # a later step means the earlier open ones are settled: a new round was
+    # held, so the previous gate was passed; a new figure answers the last one
+    for r in _stage_rows(conn, args.job_id):
+        if r["result"] != "pending":
+            continue
+        if r["kind"] != "offer":
+            _stage_update(conn, args.job_id, r["seq"], "passed", None)
+            msgs.append(f"  stage {r['seq']} ({r['kind']}): pending -> passed (a later step followed)")
+        elif offer:
+            _stage_update(conn, args.job_id, r["seq"], "countered", args.date)
+            msgs.append(f"  stage {r['seq']} (offer): pending -> countered")
+
+    seq = (conn.execute("SELECT MAX(seq) FROM stages WHERE job_id=?",
+                        (args.job_id,)).fetchone()[0] or 0) + 1
+    ts = now_iso()
+    conn.execute(
+        f"INSERT INTO stages ({', '.join(STAGE_COLUMNS)}) VALUES ({', '.join('?' * len(STAGE_COLUMNS))})",
+        (args.job_id, seq, args.kind, args.label, args.date, result, decided,
+         args.amount if offer else None,
+         (args.currency or "EUR") if offer else None,
+         (args.basis or "gross_annual") if offer else None,
+         args.party if offer else None, args.note, ts, ts))
+    log_event(conn, run_id=args.run_id, command="stage", job_id=args.job_id, action="stage_added",
+              detail=json.dumps({"seq": seq, "kind": args.kind, "result": result}))
+
+    # lifecycle follows the ledger: a gate means the employer responded; the
+    # first employer offer means the job is `offered`
+    status = row["status"]
+    if status == "applied":
+        msgs.append(_move_status(conn, args.job_id, status, "responded", args.date,
+                                 args.run_id, "stage recorded"))
+        status = "responded"
+    if offer and args.party == "employer" and status == "responded":
+        msgs.append(_move_status(conn, args.job_id, status, "offered", args.date,
+                                 args.run_id, "employer offer"))
+    stamp_write(conn)
+    conn.commit()
+    what = f"{args.kind}" + (f" ({args.label})" if args.label else "")
+    if offer:
+        what += f" {args.party} {args.amount:,} {args.currency or 'EUR'} {args.basis or 'gross_annual'}"
+    print(f"{args.job_id} stage {seq}: {what} on {args.date} -> {result}")
+    for m in msgs:
+        print(m)
+
+
+def cmd_stage_resolve(args) -> None:
+    conn = connect()
+    row = require_job(conn, args.job_id)
+    rows = _stage_rows(conn, args.job_id)
+    if not rows:
+        raise DbError(f"{args.job_id} has no stages. Add one with `stage add`.")
+    if args.seq is not None:
+        target = next((r for r in rows if r["seq"] == args.seq), None)
+        if target is None:
+            raise DbError(f"{args.job_id} has no stage {args.seq}.")
+    else:
+        target = _last_pending(conn, args.job_id)
+        if target is None:
+            raise DbError(f"{args.job_id} has no pending stage; pass --seq to change a settled one.")
+    offer = target["kind"] == "offer"
+    require_enum(args.result, OFFER_RESULTS if offer else GATE_RESULTS, "result")
+    when = args.date or date.today().isoformat()
+    validate_date(when, "--date")
+    _stage_update(conn, args.job_id, target["seq"], args.result, when)
+    log_event(conn, run_id=args.run_id, command="stage", job_id=args.job_id, action="stage_resolved",
+              detail=json.dumps({"seq": target["seq"], "from": target["result"], "to": args.result}))
+    msgs = []
+    # settling an offer settles the job: accepting either side's figure is an
+    # accepted offer; the employer's offer declined or taken back ends it too
+    outcome = None
+    if offer and args.result == "accepted":
+        outcome = "offer_accepted"
+    elif offer and target["party"] == "employer" and args.result in ("declined", "withdrawn"):
+        outcome = "offer_" + args.result
+    if outcome and row["status"] != "closed":
+        if "closed" not in TRANSITIONS.get(row["status"], set()):
+            raise DbError(f"{args.job_id} is `{row['status']}` and cannot close; "
+                          "set its status first.")
+        conn.execute("UPDATE jobs SET status='closed', outcome=?, updated_at=? WHERE job_id=?",
+                     (outcome, now_iso(), args.job_id))
+        log_event(conn, run_id=args.run_id, command="stage", job_id=args.job_id,
+                  action="status_change",
+                  detail=json.dumps({"from": row["status"], "to": "closed", "outcome": outcome,
+                                     "via": "offer resolved"}))
+        msgs.append(f"{args.job_id}: {row['status']} -> closed (outcome={outcome}) [offer resolved]")
+    elif not offer and args.result == "failed" and row["status"] != "closed":
+        msgs.append(f"  (job stays `{row['status']}` — close it with "
+                    f"`set-status --status closed --outcome rejected` if this ends the process)")
+    stamp_write(conn)
+    conn.commit()
+    print(f"{args.job_id} stage {target['seq']} ({target['kind']}): "
+          f"{target['result']} -> {args.result} (decided {when})")
+    for m in msgs:
+        print(m)
+
+
+_RESULT_MARK = {"passed": "✔", "failed": "✘", "pending": "⋯", "withdrawn": "–",
+                "countered": "↔", "accepted": "✔", "declined": "✘"}
+
+
+def stage_summary(rows) -> str:
+    """One line per job: `hr ✔ 2030-01-10 · hm ⋯ 2030-01-24 · offer employer 250,000 ↔`."""
+    parts = []
+    for r in rows:
+        bit = r["kind"] + (f" ({r['label']})" if r["label"] else "")
+        if r["kind"] == "offer":
+            bit += f" {r['party']} {r['amount']:,} {r['currency']}"
+        parts.append(f"{bit} {_RESULT_MARK.get(r['result'], r['result'])} {r['date']}")
+    return " · ".join(parts)
+
+
+def cmd_stage_list(args) -> None:
+    conn = connect()
+    require_job(conn, args.job_id)
+    rows = _stage_rows(conn, args.job_id)
+    if not rows:
+        print(f"{args.job_id}: no stages recorded.")
+        return
+    for r in rows:
+        line = f"{r['seq']:>2}  {r['kind']:<6} {r['date']}  {r['result']:<9}"
+        if r["decided"]:
+            line += f" decided {r['decided']}"
+        if r["kind"] == "offer":
+            line += f"  {r['party']} {r['amount']:,} {r['currency']} {r['basis']}"
+        if r["label"]:
+            line += f"  [{r['label']}]"
+        if r["note"]:
+            line += f"  — {r['note']}"
+        print(line)
+
+
 def cmd_get(args) -> None:
     conn = connect()
     row = require_job(conn, args.job_id)
@@ -488,6 +760,9 @@ def cmd_get(args) -> None:
         val = row[col]
         if val not in (None, ""):
             print(f"{col}: {val}")
+    ledger = _stage_rows(conn, args.job_id)
+    if ledger:
+        print(f"stages: {stage_summary(ledger)}")
 
 
 def cmd_list(args) -> None:
@@ -682,6 +957,138 @@ def cmd_last_event(args) -> None:
         return
 
 
+# ---------------------------------------------------------------- funnel
+
+_LEGACY_INTERVIEW = ("hm:", "hr:", "tech:", "panel:", "final:", "offer:")
+OFFER_OUTCOMES = ("offer_accepted", "offer_declined", "offer_withdrawn", "offer")
+
+
+def _legacy_stage(r) -> str:
+    return (r["interview_stage"] or "").lower()
+
+
+def _legacy_test(r) -> bool:
+    return "test:" in _legacy_stage(r) or "async test" in _legacy_stage(r)
+
+
+def _legacy_interview(r) -> bool:
+    return (r["outcome"] or "") in ("interview",) + OFFER_OUTCOMES \
+        or any(p in _legacy_stage(r) for p in _LEGACY_INTERVIEW)
+
+
+def ledger_by_job(conn: sqlite3.Connection) -> dict:
+    out = {}
+    for r in conn.execute("SELECT * FROM stages ORDER BY job_id, seq"):
+        out.setdefault(r["job_id"], []).append(r)
+    return out
+
+
+def job_progress(job, ledger_rows) -> dict:
+    """What a job's history proves. The ledger wins where it exists; a job with
+    no stage rows falls back to reading its free-text `interview_stage`."""
+    if ledger_rows:
+        gates = [g for g in ledger_rows if g["kind"] != "offer"]
+        tests = [g for g in gates if g["kind"] == "test"]
+        # an async test proves nothing about the CV screen until it is passed
+        past = any(g["kind"] != "test" for g in gates) \
+            or any(g["result"] == "passed" for g in tests) \
+            or any(g["kind"] == "offer" for g in ledger_rows)
+        return {"ledger": True, "past_screen": past,
+                "via_test": past and bool(tests) and all(g["kind"] == "test" for g in gates),
+                "rounds_passed": sum(1 for g in gates if g["result"] == "passed"),
+                "interview": any(g["kind"] not in ("test", "screen") for g in gates),
+                "offer": any(g["kind"] == "offer" and g["party"] == "employer"
+                             for g in ledger_rows)
+                or (job["outcome"] or "") in OFFER_OUTCOMES}
+    test, intv = _legacy_test(job), _legacy_interview(job)
+    return {"ledger": False, "past_screen": test or intv, "via_test": test,
+            "rounds_passed": 0, "interview": intv,
+            "offer": (job["outcome"] or "") in OFFER_OUTCOMES or "offer:" in _legacy_stage(job)}
+
+
+def funnel_metrics(conn: sqlite3.Connection, rows=None) -> dict:
+    """Applied → responded → past screen → passed round 1..N → offer. Round
+    depth only counts ledger jobs; with no ledger at all the legacy
+    `interview` link is reported instead."""
+    if rows is None:
+        rows = conn.execute("SELECT * FROM jobs").fetchall()
+    ledger = ledger_by_job(conn)
+    appl = [r for r in rows if r["date_applied"]]
+    prog = {r["job_id"]: job_progress(r, ledger.get(r["job_id"])) for r in appl}
+    depth = max((p["rounds_passed"] for p in prog.values()), default=0)
+    return {
+        "applied": len(appl),
+        "responded": sum(1 for r in appl if r["response_date"]),
+        "past_screen": sum(1 for p in prog.values() if p["past_screen"]),
+        "via_test": sum(1 for p in prog.values() if p["via_test"]),
+        "interview": sum(1 for p in prog.values() if p["interview"]),
+        "rounds": [sum(1 for p in prog.values() if p["rounds_passed"] >= k)
+                   for k in range(1, depth + 1)],
+        "offer": sum(1 for p in prog.values() if p["offer"]),
+        "has_ledger": any(p["ledger"] for p in prog.values()),
+    }
+
+
+def salary_expectation() -> tuple | None:
+    """(amount, currency) from applicant_profile.yaml's salary_expectation*
+    field, or None. Accepts `100000`, `{value: 100000}`, `"EUR 100k"`."""
+    p = paths.applicant_profile()
+    if not p.is_file():
+        return None
+    try:
+        data = packs.load_yaml(p)
+    except Exception:
+        return None
+
+    def find(d):
+        if isinstance(d, dict):
+            for k, v in d.items():
+                if str(k).startswith("salary_expectation"):
+                    return k, v
+                hit = find(v)
+                if hit:
+                    return hit
+        return None
+    hit = find(data)
+    if not hit:
+        return None
+    key, val = hit
+    if isinstance(val, dict):
+        val = val.get("value")
+    m = re.search(r"(\d[\d,.\s]*\d|\d)\s*([kK])?", str(val or ""))
+    if not m:
+        return None
+    amount = int(re.sub(r"[^\d]", "", m.group(1))) * (1000 if m.group(2) else 1)
+    cur = re.search(r"\b([A-Z]{3})\b", str(val))
+    currency = cur.group(1) if cur else (str(key).rsplit("_", 1)[-1].upper()
+                                         if str(key).count("_") >= 2 else "EUR")
+    return amount, currency
+
+
+_BASIS_LABEL = {"gross_annual": "gross/yr", "monthly": "/month", "daily_rate": "/day"}
+
+
+def offer_chain(offers, expectation=None) -> str:
+    """`employer 250,000 EUR gross/yr → you 270,000 (pending since …) · vs expectation 300,000 (−17%)`"""
+    bits = []
+    for i, o in enumerate(offers):
+        who = "you" if o["party"] == "candidate" else "employer"
+        bit = f"{who} {o['amount']:,}"
+        if i == 0:
+            bit += f" {o['currency']} {_BASIS_LABEL.get(o['basis'], o['basis'])}"
+        bits.append(bit)
+    line = " → ".join(bits)
+    last = offers[-1]
+    line += (f" (pending since {last['date']})" if last["result"] == "pending"
+             else f" ({last['result']} {last['decided'] or last['date']})")
+    first_emp = next((o for o in offers if o["party"] == "employer"), None)
+    if expectation and first_emp and first_emp["currency"] == expectation[1] \
+            and first_emp["basis"] == "gross_annual":
+        diff = round(100 * (first_emp["amount"] - expectation[0]) / expectation[0])
+        line += f" · vs expectation {expectation[0]:,} ({diff:+d}%)".replace("-", "−")
+    return line
+
+
 def cmd_dashboard(args) -> None:
     conn = connect()
     thresholds_cfg = packs.thresholds()
@@ -705,47 +1112,46 @@ def cmd_dashboard(args) -> None:
     print(f"- Sent this month: **{month_n}**")
     # conversion funnel — each later stage is appended ONLY when it has events,
     # so the line grows as the pipeline matures. % is of applications sent.
-    frows = conn.execute(
-        "SELECT date_applied, response_date, interview_stage, outcome FROM jobs").fetchall()
-    appl = [r for r in frows if r["date_applied"]]
-    n_appl = len(appl)
-    n_resp = sum(1 for r in appl if r["response_date"])
-    _pref = ("hm:", "hr:", "tech:", "panel:", "final:", "offer:")
-
-    def _stage(r):
-        return (r["interview_stage"] or "").lower()
-
-    def _reached_test(r):
-        return "test:" in _stage(r) or "async test" in _stage(r)
-
-    def _reached_interview(r):
-        return (r["outcome"] or "") in ("interview", "offer") \
-            or any(p in _stage(r) for p in _pref)
-    # "past screen" = the response advanced beyond CV screening — evidenced by an
-    # async test or an interview invite (vs a straight screening rejection).
-    n_test = sum(1 for r in appl if _reached_test(r))
-    n_screen = sum(1 for r in appl if _reached_test(r) or _reached_interview(r))
-    n_intv = sum(1 for r in appl if _reached_interview(r))
-    n_offer = sum(1 for r in frows if (r["outcome"] or "") == "offer"
-                  or "offer:" in _stage(r))
+    f = funnel_metrics(conn)
+    n_appl = f["applied"]
 
     def _pct(x):
         return f" ({100 * x // n_appl}%)" if n_appl else ""
-    chain = [f"{n_appl} applied", f"{n_resp} responded{_pct(n_resp)}"]
-    if n_screen:
-        chain.append(f"{n_screen} past screen{_pct(n_screen)}")
-    if n_intv:
-        chain.append(f"{n_intv} interview{_pct(n_intv)}")
-    if n_offer:
-        chain.append(f"{n_offer} offer{_pct(n_offer)}")
+    chain = [f"{n_appl} applied", f"{f['responded']} responded{_pct(f['responded'])}"]
+    if f["past_screen"]:
+        chain.append(f"{f['past_screen']} past screen{_pct(f['past_screen'])}")
+    if f["rounds"]:
+        chain += [f"{n} passed round {k}{_pct(n)}" for k, n in enumerate(f["rounds"], 1)]
+    elif f["interview"]:
+        chain.append(f"{f['interview']} interview{_pct(f['interview'])}")
+    if f["offer"]:
+        chain.append(f"{f['offer']} offer{_pct(f['offer'])}")
     print(f"- Funnel: {' → '.join(chain)}")
-    if n_resp:
-        detail = f"- Response quality: {n_screen}/{n_resp} responses passed CV screen"
-        if n_test:
-            detail += f" ({n_test} via async test)"
-        detail += f", {n_resp - n_screen} were screening rejections"
+    if f["responded"]:
+        detail = (f"- Response quality: {f['past_screen']}/{f['responded']} "
+                  "responses passed CV screen")
+        if f["via_test"]:
+            detail += f" ({f['via_test']} via async test)"
+        detail += f", {f['responded'] - f['past_screen']} were screening rejections"
         print(detail)
     print()
+
+    offered = conn.execute("SELECT * FROM jobs WHERE status='offered' "
+                           "ORDER BY updated_at DESC").fetchall()
+    if offered:
+        expectation = salary_expectation()
+        print("## Offers\n")
+        for r in offered:
+            offers = [x for x in _stage_rows(conn, r["job_id"]) if x["kind"] == "offer"]
+            first_emp = next((x for x in offers if x["party"] == "employer"), None)
+            print(f"- {r['job_id']}  {r['company']} — {r['title']}"
+                  + (f"   offered {first_emp['date']}" if first_emp else ""))
+            if offers:
+                print(f"  {offer_chain(offers, expectation)}")
+            link = r["original_url"] or r["url"]
+            if link:
+                print(f"  {link}")
+        print()
 
     print("## Funnel\n")
     for s in STATUSES:
@@ -804,6 +1210,9 @@ def cmd_dashboard(args) -> None:
         for r in responded_rows:
             stage = r["interview_stage"] or "—"
             print(f"- {r['job_id']}  {r['company']} — {r['title']}")
+            ledger = _stage_rows(conn, r["job_id"])
+            if ledger:
+                print(f"  rounds: {stage_summary(ledger)}")
             print(f"  stage: {stage}")
             link = r["original_url"] or r["url"]
             if link:
@@ -825,8 +1234,8 @@ def cmd_dashboard(args) -> None:
             print(f"- …and {len(overdue) - 8} more — run /track follow up <job_id>")
         print()
     waiting = conn.execute(
-        "SELECT COUNT(*) FROM jobs WHERE status IN ('applied','responded')").fetchone()[0]
-    print(f"_In flight (applied/responded): {waiting}. "
+        "SELECT COUNT(*) FROM jobs WHERE status IN ('applied','responded','offered')").fetchone()[0]
+    print(f"_In flight (applied/responded/offered): {waiting}. "
           f"Discarded (permanent no-rework record): {counts.get('discarded', 0)}._")
 
 
@@ -875,24 +1284,17 @@ def cmd_stats(args) -> None:
     for s in STATUSES:
         if by_status.get(s):
             print(f"  {s:<12} {by_status[s]:>4}  {100 * by_status[s] // len(rows):>3}%")
-    applied_plus = [r for r in rows if r["status"] in ("applied", "responded", "closed", "on_hold")
+    applied_plus = [r for r in rows if r["status"] in ("applied", "responded", "offered",
+                                                       "closed", "on_hold")
                     and r["date_applied"]]
     responded = [r for r in applied_plus if r["response_date"]]
-    _interview_prefixes = ("hm:", "hr:", "tech:", "panel:", "final:", "offer:")
-    positive = [r for r in responded if (r["outcome"] or "") in ("interview", "offer")
-                or "interview" in (r["interview_stage"] or "").lower()
-                or any(p in (r["interview_stage"] or "").lower() for p in _interview_prefixes)]
-    # past CV screen = advanced beyond a screening rejection (async test or interview)
-    screen_passed = [r for r in responded
-                     if "test:" in (r["interview_stage"] or "").lower()
-                     or "async test" in (r["interview_stage"] or "").lower()
-                     or r in positive]
-    tested = [r for r in responded if "test:" in (r["interview_stage"] or "").lower()
-              or "async test" in (r["interview_stage"] or "").lower()]
+    f = funnel_metrics(conn, rows)
     print(f"\nApplications sent: {len(applied_plus)} | responses: {len(responded)}"
           + (f" ({100 * len(responded) // len(applied_plus)}%)" if applied_plus else "")
-          + f" | past CV screen: {len(screen_passed)} ({len(tested)} async test)"
-          + f" | interviews/offers: {len(positive)}")
+          + f" | past CV screen: {f['past_screen']} ({f['via_test']} via async test)"
+          + (" | " + " | ".join(f"passed round {k}: {n}" for k, n in enumerate(f["rounds"], 1))
+             if f["rounds"] else f" | interviews/offers: {f['interview']}")
+          + f" | offers: {f['offer']}")
 
     # time-to-response breakdown -------------------------------------------
     import datetime as _dt
@@ -972,6 +1374,8 @@ def cmd_stats(args) -> None:
             if stage_counts.get(label):
                 print(f"  {label:<10} {stage_counts[label]}")
 
+    _stats_ledger(conn, rows)
+
     # outcomes -------------------------------------------------------------
     outs = {}
     for r in rows:
@@ -991,12 +1395,93 @@ def cmd_stats(args) -> None:
             print(f"- {r['job_id']} {r['company']} (applied {r['date_applied']}, due {r['follow_up_date']})")
 
 
+def _median(xs):
+    xs = sorted(xs)
+    if not xs:
+        return None
+    m = len(xs) // 2
+    return xs[m] if len(xs) % 2 else (xs[m - 1] + xs[m]) / 2
+
+
+def _days(a, b):
+    try:
+        return (date.fromisoformat(b[:10]) - date.fromisoformat(a[:10])).days
+    except (TypeError, ValueError):
+        return None
+
+
+def _stats_ledger(conn, rows) -> None:
+    """Rounds and offers from the stage ledger: depth, pass rate per kind, the
+    wait between rounds and for each decision, and the offer figures."""
+    ledger = ledger_by_job(conn)
+    jobs = {r["job_id"]: r for r in rows if r["job_id"] in ledger}
+    if not jobs:
+        return
+    gates = [g for j in jobs for g in ledger[j] if g["kind"] != "offer"]
+    if gates:
+        print("\n## Rounds (stage ledger)\n")
+        print(f"  {'kind':<7} {'reached':>7} {'passed':>6} {'failed':>6} {'pending':>7} "
+              f"{'withdrawn':>9}  {'median days to decision':>23}")
+        for kind in STAGE_KINDS:
+            ks = [g for g in gates if g["kind"] == kind]
+            if not ks:
+                continue
+            c = {res: sum(1 for g in ks if g["result"] == res) for res in GATE_RESULTS}
+            wait = _median([d for d in (_days(g["date"], g["decided"]) for g in ks
+                                        if g["decided"]) if d is not None])
+            print(f"  {kind:<7} {len(ks):>7} {c['passed']:>6} {c['failed']:>6} "
+                  f"{c['pending']:>7} {c['withdrawn']:>9}  "
+                  f"{'-' if wait is None else f'{wait:g}':>23}")
+        gaps = []
+        for j in jobs:
+            js = [g for g in ledger[j] if g["kind"] != "offer"]
+            gaps += [d for d in (_days(a["date"], b["date"]) for a, b in zip(js, js[1:]))
+                     if d is not None]
+        depth = {}
+        for j in jobs:
+            n = sum(1 for g in ledger[j] if g["kind"] != "offer" and g["result"] == "passed")
+            depth[n] = depth.get(n, 0) + 1
+        print("\n  rounds passed per process: "
+              + ", ".join(f"{k}: {depth[k]}" for k in sorted(depth)))
+        if gaps:
+            print(f"  days between consecutive rounds: median {_median(gaps):g} "
+                  f"(min {min(gaps)}, max {max(gaps)})")
+
+    offer_jobs = [j for j in jobs if any(g["kind"] == "offer" for g in ledger[j])]
+    if offer_jobs:
+        print("\n## Offers\n")
+        expectation = salary_expectation()
+        to_offer, vs_exp, uplift = [], [], []
+        for j in offer_jobs:
+            offers = [g for g in ledger[j] if g["kind"] == "offer"]
+            emp = [g for g in offers if g["party"] == "employer"]
+            if emp and jobs[j]["date_applied"]:
+                d = _days(jobs[j]["date_applied"], emp[0]["date"])
+                if d is not None:
+                    to_offer.append(d)
+            if emp and expectation and emp[0]["currency"] == expectation[1] \
+                    and emp[0]["basis"] == "gross_annual":
+                vs_exp.append(emp[0]["amount"] / expectation[0])
+            final = next((g for g in offers if g["result"] == "accepted"), None)
+            if emp and final:
+                uplift.append(final["amount"] / emp[0]["amount"])
+            print(f"- {j} {jobs[j]['company']}: {offer_chain(offers, expectation)}")
+        print(f"\n  offers received: {len(offer_jobs)}")
+        if to_offer:
+            print(f"  median days applied → first offer: {_median(to_offer):g}")
+        if vs_exp:
+            print(f"  first offer vs expectation: median {_median(vs_exp):.2f}×")
+        if uplift:
+            print(f"  negotiated uplift (accepted ÷ first offer): median {_median(uplift):.2f}×")
+
+
 # The text export is the record of record: the DB is a runtime artefact,
 # rebuilt from these CSVs (see /sync). Stable table set, stable row order, and
 # stable column order so a commit diff shows only what actually changed.
 CSV_TABLES = [
     ("jobs", JOB_COLUMNS, "job_id"),
     ("events", EVENT_COLUMNS, "id"),
+    ("stages", STAGE_COLUMNS, "job_id, seq"),
     ("id_reservations", RESERVATION_COLUMNS, "source"),
     ("meta", META_COLUMNS, "key"),
 ]
@@ -1065,9 +1550,10 @@ def cmd_import_csv(args) -> None:
     manifest = {}
     if (src / "manifest.json").exists():
         manifest = json.loads((src / "manifest.json").read_text(encoding="utf-8"))
-        if manifest.get("schema_version") != SCHEMA_VERSION:
+        if manifest.get("schema_version") not in IMPORTABLE_SCHEMAS:
             raise DbError(f"manifest schema_version {manifest.get('schema_version')} "
-                          f"!= this build's {SCHEMA_VERSION}; refusing to import.")
+                          f"is not importable by this build (accepts "
+                          f"{', '.join(map(str, sorted(IMPORTABLE_SCHEMAS)))}); refusing to import.")
 
     # Move an existing DB aside rather than overwriting — a restore is
     # reversible, an overwrite is not.
@@ -1089,6 +1575,10 @@ def cmd_import_csv(args) -> None:
         for header, values in _read_csv(path):
             if header != cols:
                 raise DbError(f"{table}.csv header {header} != expected {cols}")
+            if table == "jobs":
+                # pre-v2 `offer` outcome → the explicit accepted outcome
+                i = cols.index("outcome")
+                values[i] = LEGACY_OUTCOMES.get(values[i], values[i])
             conn.execute(f"INSERT INTO {table} ({collist}) VALUES ({placeholders})", values)
             n += 1
         total[table] = n
@@ -1203,6 +1693,39 @@ def build_parser() -> argparse.ArgumentParser:
     sf.add_argument("field", help="Field name (see error message for the list).")
     sf.add_argument("value", help="New value ('' clears).")
     sf.set_defaults(func=cmd_set_field)
+
+    sg = sub.add_parser("stage", help="Stage ledger: one row per round that can be passed "
+                        "or failed (no limit), or per figure in an offer negotiation.")
+    ssub = sg.add_subparsers(dest="stage_cmd", required=True)
+    sa = ssub.add_parser("add", help="Record a round when it is held (a test: when submitted), "
+                         "or an offer figure. Settles earlier pending rows; moves "
+                         "applied -> responded, and responded -> offered on an employer offer.")
+    sa.add_argument("--job-id", required=True)
+    sa.add_argument("--kind", required=True, choices=STAGE_KINDS)
+    sa.add_argument("--date", required=True, help="YYYY-MM-DD the round was held / figure given.")
+    sa.add_argument("--label", help='Free text, e.g. "case study", "CTO round".')
+    sa.add_argument("--result", help="Default pending. Gates: " + ", ".join(GATE_RESULTS)
+                    + ". Offers: " + ", ".join(OFFER_RESULTS) + ".")
+    sa.add_argument("--decided", help="YYYY-MM-DD the result became known (backfill).")
+    sa.add_argument("--amount", type=int, help="kind=offer: integer amount, e.g. 250000.")
+    sa.add_argument("--currency", help="kind=offer: ISO 4217 code (default EUR).")
+    sa.add_argument("--basis", choices=OFFER_BASES, help="kind=offer (default gross_annual).")
+    sa.add_argument("--party", choices=OFFER_PARTIES, help="kind=offer: who named the figure.")
+    sa.add_argument("--note")
+    sa.add_argument("--run-id", help="Run id for the event log.")
+    sa.set_defaults(func=cmd_stage_add)
+    sr = ssub.add_parser("resolve", help="Settle a stage (default: the last pending one). "
+                         "Accepting an offer, or the employer's offer being declined or "
+                         "withdrawn, closes the job with the matching offer_* outcome.")
+    sr.add_argument("--job-id", required=True)
+    sr.add_argument("--seq", type=int, help="Stage number (see `stage list`).")
+    sr.add_argument("--result", required=True)
+    sr.add_argument("--date", help="YYYY-MM-DD the result became known (default today).")
+    sr.add_argument("--run-id", help="Run id for the event log.")
+    sr.set_defaults(func=cmd_stage_resolve)
+    sl = ssub.add_parser("list", help="Print a job's stages.")
+    sl.add_argument("--job-id", required=True)
+    sl.set_defaults(func=cmd_stage_list)
 
     g = sub.add_parser("get", help="Print all non-empty fields of a job.")
     g.add_argument("job_id")

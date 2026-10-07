@@ -51,9 +51,13 @@ single source of truth. See `docs/codex.md`.
 ## Lifecycle status enum
 
 `found → scored → discarded | shortlisted → generated → ready → applied →
-responded → closed` (+ `on_hold`, `missed`, `skipped`). Transitions are
-validated by db.py; `closed` takes an `outcome`
-(no_response/rejected/interview/offer/withdrawn).
+responded → [offered →] closed` (+ `on_hold`, `missed`, `skipped`). Transitions
+are validated by db.py; `closed` takes an `outcome`
+(no_response/rejected/interview/offer_accepted/offer_declined/offer_withdrawn/
+withdrawn — `withdrawn` is the candidate pulling out, `offer_withdrawn` the
+employer taking an offer back). Interview rounds and offer figures live in the
+stage ledger (`db.py stage add|resolve|list`): one row per gate that can be
+passed or failed, numbered with no upper limit, plus one row per offer figure.
 
 ## Invariants (non-negotiable)
 
@@ -97,7 +101,7 @@ validated by db.py; `closed` takes an `outcome`
    the user declared in `config/languages.yaml`.
 10. **Workspace state travels as CSV; the database is a local artefact.**
     `state/pipeline.db` is never committed — `db.py export-csv` writes the
-    diff-friendly CSV record (jobs/events/id_reservations/meta + manifest) that
+    diff-friendly CSV record (jobs/events/stages/id_reservations/meta + manifest) that
     is, and `db.py import-csv` rebuilds the DB. `/sync` is the only thing that
     commits or moves the workspace; no pipeline command syncs on its own, and
     divergent pipeline state is never auto-merged (show both sides, user picks).

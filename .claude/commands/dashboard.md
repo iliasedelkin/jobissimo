@@ -8,8 +8,8 @@ anything – status *changes* belong to `/track`.
 
 | User wants | Run |
 |---|---|
-| Actionable overview (default, no arguments) | `python3 scripts/db.py dashboard` – funnel + shortlisted-to-prepare + ready-to-apply + overdue follow-ups |
-| Aggregate stats / conversion / ROI | `python3 scripts/db.py stats [filters]` – funnel %, applications→responses→interviews, per-source ROI, fit/ATS score averages, outcomes, overdue follow-ups |
+| Actionable overview (default, no arguments) | `python3 scripts/db.py dashboard` – funnel (to the deepest round passed) + offers under negotiation + shortlisted-to-prepare + ready-to-apply + rounds per in-progress job + overdue follow-ups |
+| Aggregate stats / conversion / ROI | `python3 scripts/db.py stats [filters]` – funnel %, applications→responses→rounds passed, per-source ROI, fit/ATS score averages, rounds by kind (pass rate, days to decision), offers (vs expectation, negotiated uplift), outcomes, overdue follow-ups |
 | A concrete list of jobs | `python3 scripts/db.py list [filters]` – sortable table (priority → fit → date) |
 | Everything about one job | `python3 scripts/db.py get <job_id>` |
 
@@ -35,6 +35,8 @@ anything – status *changes* belong to `/track`.
 | "high-priority stuff still waiting" | `db.py list --status shortlisted --status ready --priority high` |
 | "response rate by board" | `db.py stats` → read the Per source table |
 | "why was X discarded?" | `db.py get <job_id>` → `rejection_reason` |
+| "how far do my interviews get?" / "where do I fail?" | `db.py stats` → Rounds (stage ledger) section |
+| "what offers do I have?" | `db.py dashboard` → Offers section (or `db.py stats` → Offers) |
 | "what's overdue?" | `db.py stats` → Overdue follow-ups section (or dashboard) |
 
 Resolve company names to job_ids via `db.py list` output. If a request mixes

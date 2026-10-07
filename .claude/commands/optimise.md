@@ -43,7 +43,10 @@ python3 scripts/db.py log --run-id $RUN_ID --command optimise --action run_start
 ### 1. Funnel + calibration
 
 - Conversion at each stage: found → scored → shortlisted → generated → ready
-  → applied → responded → interview/offer.
+  → applied → responded → past screen → passed round 1..N → offer. Round
+  depth, per-kind pass rates, days to decision and between rounds, and offer
+  figures come from `db.py stats` (§ Rounds, § Offers — the stage ledger);
+  jobs with no ledger rows only show the legacy text-derived "interview".
 - Scoring calibration:
   - scored-yes-but-user-skipped (status `skipped`/`missed` with rec `yes`)
   - low-priority-but-applied

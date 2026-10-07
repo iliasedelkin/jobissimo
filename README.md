@@ -46,9 +46,12 @@ export, and it is not configurable.
 ```
 
 **Lifecycle:** `found → scored → discarded | shortlisted → generated → ready →
-applied → responded → closed` (+ `on_hold`, `missed`, `skipped`). Transitions
-are validated by `scripts/db.py`; `closed` carries an outcome
-(no_response / rejected / interview / offer / withdrawn).
+applied → responded → [offered →] closed` (+ `on_hold`, `missed`, `skipped`).
+Transitions are validated by `scripts/db.py`; `closed` carries an outcome
+(no_response / rejected / interview / offer_accepted / offer_declined /
+offer_withdrawn / withdrawn). Each interview round and offer figure is a row
+in the stage ledger (`db.py stage`), so the funnel shows how deep each process
+went.
 
 ## Requirements
 
