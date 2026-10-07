@@ -183,7 +183,7 @@ discovery alive at a fixed cost.
   (`python3 scripts/db.py list --company "<name>"`), apply the repost policy
   for same/near-same titles:
   - prior `discarded` → skip, log `{"reason":"repost_of_discarded","prior":"<id>"}`
-  - prior `applied`/`responded`/`closed` → skip, log
+  - prior `applied`/`responded`/`offered`/`closed` → skip, log
     `{"reason":"repost_of_applied","prior":"<id>"}` — a repost never restarts
     an application already made
   - prior `shortlisted`/`ready` → skip; append the new URL to the prior row's
@@ -275,7 +275,7 @@ run, then apply per job):
   the user genuinely cannot satisfy is `location_fit: reject`, which is
   excluded here and skipped in §2 — that is the gate, not priority.
 - **Same-company concurrency (conversion policy):** at most ONE in-flight
-  application (`applied`/`responded`) per company. A new `yes`/`maybe` role at
+  application (`applied`/`responded`/`offered`) per company. A new `yes`/`maybe` role at
   a company with one in flight is scored and recorded normally, then put on
   hold (`set-status --status on_hold`, note `held: <in-flight job_id>`) — it
   re-enters the shortlist when the in-flight application closes. Multiple

@@ -30,13 +30,23 @@ class TestCsvRoundTrip(unittest.TestCase):
         self.env = make_workspace(Path(self.tmp.name), with_apps=False)
         self.home = Path(self.tmp.name) / "profile"
         self.backup = self.home / "state" / "backup"
-        # Seed jobs, an event, and an id reservation so all four tables + the
+        # Seed jobs, an event, stages and an id reservation so all tables + the
         # events AUTOINCREMENT sequence are exercised.
         add(self.env, "sample001")
         add(self.env, "sample002", company="Beta", title="PM")
         run_script("db.py", "next-id", "sample", env=self.env)
         run_script("db.py", "log", "--run-id", "r1", "--command", "hunt",
                    "--action", "job_added", "--job-id", "sample001", env=self.env)
+        # and the stage ledger: a round and an offer figure on an applied job
+        add(self.env, "sample003", company="Gamma", title="Lead", status="ready")
+        run_script("db.py", "set-status", "--job-id", "sample003", "--status", "applied",
+                   "--applied-via", "email", env=self.env)
+        for extra in (["--kind", "hr", "--date", "2030-01-10", "--label", "intro"],
+                      ["--kind", "offer", "--date", "2030-01-20", "--party", "employer",
+                       "--amount", "250000"]):
+            res = run_script("db.py", "stage", "add", "--job-id", "sample003", *extra,
+                             env=self.env)
+            assert res.returncode == 0, res.stderr
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -47,8 +57,9 @@ class TestCsvRoundTrip(unittest.TestCase):
     def test_round_trip_byte_identical(self):
         self.assertEqual(self._export().returncode, 0)
         first = {f.name: f.read_bytes() for f in self.backup.glob("*.csv")}
-        self.assertEqual(set(first), {"jobs.csv", "events.csv",
+        self.assertEqual(set(first), {"jobs.csv", "events.csv", "stages.csv",
                                       "id_reservations.csv", "meta.csv"})
+        self.assertEqual(first["stages.csv"].decode().count("\n"), 3)  # header + 2
         seq_before = self._events_seq()
 
         # import into the existing DB, then export again

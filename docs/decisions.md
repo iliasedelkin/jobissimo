@@ -228,6 +228,33 @@ Left for later: the `/optimise` lens that proposes calibrated intensity
 profiles. `/cycle` records what each run cost against its targets from day one,
 but there is nothing to calibrate against until it has run a few times.
 
+## Stage ledger and offers (schema v2)
+
+`interview_stage` was the only record after the CV screen: a free-text log the
+dashboard read by substring. It could say a job "reached an interview" but not
+how many rounds ran, which one failed, whether a round was still pending, or
+how long decisions took. An offer had no state of its own and no amount.
+
+- **A `stages` table, one row per gate** — a step that can be passed or
+  failed — numbered per job with no upper limit. Rows are added when a round
+  is held, so `pending` means "held, not decided". Scheduling and impressions
+  stay in the narrative. Rejected alternative: typed rows in `events`.
+  `result` changes after the fact, and an append-only log would force every
+  reader to pair events.
+- **Inference is narrow and deterministic.** Recording the next round passes
+  the previous one; closing `rejected`/`withdrawn` settles the pending one;
+  a new offer figure marks the previous one `countered`. Nothing else is
+  guessed.
+- **An async test is not "past screen" until it is passed.** Being sent a
+  test is often automatic; counting it as success inflated the funnel.
+- **`offered` status; offer outcomes split** into `offer_accepted`,
+  `offer_declined`, `offer_withdrawn` (`withdrawn` stays the candidate pulling
+  out). Offer rows carry amount, currency, basis and party, so negotiation is
+  a sequence on the same ledger. Legacy `offer` maps to `offer_accepted` on
+  import.
+- **v1 backups still import** (no `stages.csv`). Jobs without ledger rows keep
+  the old text-derived funnel, so history is not lost before a backfill.
+
 ## Deferred improvements (behaviour left as-is on purpose)
 
 - `coverage.py`'s profile strength score is deliberately blunt (movement, not
