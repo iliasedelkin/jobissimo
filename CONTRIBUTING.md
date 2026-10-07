@@ -96,17 +96,26 @@ Your workspace is a separate private repo (`/sync`, see `docs/sync.md`); only
 engine and pack changes belong in a public PR. The subtle case is a pack
 improvement *learned from* private data — e.g. an `/optimise` run noticing that
 Italian postings keep using a term the lexicon lacks. **The change is public;
-the evidence is not.** Contribute the pack diff with aggregate justification
-only ("14 postings across 3 months, 0 matched the lexicon"); the full evidence,
-with company names and job ids, stays in your workspace's `reports/`. Never put
-a company name tied to an outcome, a job id, or any personal token in a public
-diff or commit message.
+the evidence is not — not even aggregated or anonymised.** A true count, rate,
+date, duration or amount from your pipeline describes your job search however
+many names are stripped from it ("14 postings across 3 months" is a fact about
+you). Justify the change by its mechanism instead: cite the engine or pack
+`file:line` it fixes, and reproduce the effect on a synthetic fixture (a
+fictional JD that uses the term and shows `ats_score.py` missing it). Example
+values must be obviously fictional — round numbers like `100000`, dates in
+`2030` — never a figure that happens to be yours. The full evidence stays in
+your workspace's `reports/`. This covers PR descriptions, issues, comments and
+commit messages alike (AGENTS.md invariant 11); `scrub_check.py --outbound
+<body-file>` checks a body against your workspace's real values, and the
+Claude Code `gh` hook runs it before any issue or PR write.
 
 ## Ground rules
 
 - **No personal data in PRs — including in test fixtures.** Fixtures are
   clearly fictional (see `fixtures/`). Run `python3 scripts/scrub_check.py --all`
-  before opening a PR; CI enforces it over the tree and full history.
+  before opening a PR; CI enforces it over the tree and full history. Write the
+  PR or issue body to a file and run `scrub_check.py --outbound <file>` on it
+  first — CI has no workspace, so only your machine can check your real values.
 - Run the offline suite before opening a PR:
   `python3 -m unittest discover -s tests -p 'test_*.py'`.
 - A behaviour change needs a fixture test.

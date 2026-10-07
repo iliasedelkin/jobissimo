@@ -73,6 +73,13 @@ python3 scripts/db.py log --run-id $RUN_ID --command optimise --action run_start
 - → for config-side friction, propose config diffs. For engine-side friction
   (command file wording, script behaviour), write the finding up as a
   candidate upstream issue/PR in the report — never edit the engine locally.
+  The report keeps the real evidence; an **upstream draft** of it does not
+  (AGENTS.md invariant 11). When the user asks to file one, write the body to a
+  file with the evidence rebuilt as engine `file:line` + a synthetic-fixture
+  reproduction — no counts, rates, dates, amounts or company names from this
+  workspace, no "in one install", and example values that are obviously
+  fictional (`100000`, `2030-01-15`). Run `scrub_check.py --outbound <file>`;
+  on a finding, rewrite and re-run. Post only with the user's go-ahead.
 
 ## Output – `reports/optimiser_{YYYY-MM-DD}.md`
 

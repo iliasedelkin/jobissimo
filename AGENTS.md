@@ -101,6 +101,17 @@ validated by db.py; `closed` takes an `outcome`
     is, and `db.py import-csv` rebuilds the DB. `/sync` is the only thing that
     commits or moves the workspace; no pipeline command syncs on its own, and
     divergent pipeline state is never auto-merged (show both sides, user picks).
+11. **No workspace-derived fact leaves the workspace — anonymised or not.**
+    Issues, PRs, comments, commit messages and pack exports carry no count,
+    rate, date, duration, amount or company name taken from the user's
+    pipeline, profile or config. Stripping names does not anonymise a number:
+    it is still the user's. Upstream evidence is the engine `file:line` plus a
+    reproduction on the synthetic fixture, with obviously fictional values
+    (round numbers like `100000`, dates in `2030`). Real telemetry stays in
+    `reports/`. Every outbound body goes to a file and through
+    `scrub_check.py --outbound <file>`; in Claude Code a PreToolUse hook runs
+    that check on every `gh` issue/PR write and blocks on a finding. A
+    finding is rewritten, never waived.
 
 ## The four-layer config model
 
@@ -173,4 +184,5 @@ spec. No command requires the user to remember more than the command name and
 a job_id. New ATS keywords/synonyms go through `/optimise` evidence or a pack
 PR, and a synonym must bridge wording only — never claim a neighboring skill.
 The offline test suite (`tests/`) must pass, and `scrub_check.py --all` must
-report zero findings, before anything is committed.
+report zero findings, before anything is committed. An issue or PR body must
+pass `scrub_check.py --outbound <file>` before it is posted (invariant 11).
