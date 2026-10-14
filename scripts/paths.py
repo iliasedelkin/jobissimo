@@ -77,6 +77,16 @@ def config_dir() -> Path:
     return config_dir_with_source()[0]
 
 
+def local_dir() -> Path:
+    """Machine-specific, never-synced files (UI server state, run preferences):
+    `config/local/` — under $JOBISSIMO_CONFIG when set, else under the
+    workspace's own config/ (even before /setup has created the rest of it),
+    so the location never moves mid-onboarding. Git-ignored by the workspace."""
+    if os.environ.get("JOBISSIMO_CONFIG"):
+        return config_dir() / "local"
+    return home() / "config" / "local"
+
+
 def packs_dir() -> Path:
     """Where the engine's shipped, community-maintained packs live."""
     return REPO_ROOT / "packs"

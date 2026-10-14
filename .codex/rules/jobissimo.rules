@@ -1,8 +1,10 @@
 # Codex command rules for Jobissimo — the equivalent of the allowlist in
 # .claude/settings.json (keep the two in sync; tests/test_agents.py checks it).
 # Project-local rules load only once you trust this project in Codex.
-# scripts/sync.py is deliberately absent: it pushes to a remote, so it is
-# approved per run.
+# scripts/sync.py is allowed for `status` only (local, read-only); init, pull
+# and push move the workspace and are approved per run. agent_runner.py,
+# agent_setup.py and ui.py are deliberately absent: an agent never launches
+# another agent or changes its own permissions.
 
 prefix_rule(pattern = ["python3", "scripts/db.py"], decision = "allow")
 prefix_rule(pattern = ["python3", "scripts/audit.py"], decision = "allow")
@@ -15,5 +17,12 @@ prefix_rule(pattern = ["python3", "scripts/competency_map.py"], decision = "allo
 prefix_rule(pattern = ["python3", "scripts/coverage.py"], decision = "allow")
 prefix_rule(pattern = ["python3", "scripts/setup_check.py"], decision = "allow")
 prefix_rule(pattern = ["python3", "scripts/scrub_check.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/readmodel.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/insights.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/knowledge.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/config.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/events.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/assets.py"], decision = "allow")
+prefix_rule(pattern = ["python3", "scripts/sync.py", "status"], decision = "allow")
 prefix_rule(pattern = ["date"], decision = "allow")
 prefix_rule(pattern = ["pandoc", "-v"], decision = "allow")

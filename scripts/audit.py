@@ -117,13 +117,30 @@ def parse_cv_skills(text: str) -> list:
     return found
 
 
+KB_META_RE = re.compile(r"^<!--\s*kb:(.*?)-->\s*$", re.MULTILINE)
+
+
 def source_blocks(text: str) -> dict:
+    """Bullet bodies, minus the kb lifecycle comment (its date is not a fact
+    a CV number may be checked against)."""
     blocks = {}
     matches = list(re.finditer(r"^####\s+([A-Z0-9-]+)\s*$", text, re.MULTILINE))
     for i, m in enumerate(matches):
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-        blocks[m.group(1)] = text[m.end():end]
+        blocks[m.group(1)] = KB_META_RE.sub("", text[m.end():end])
     return blocks
+
+
+def deprecated_bullets(text: str) -> dict:
+    """{bullet_id: reason} for bullets marked `status=deprecated` by
+    knowledge.py. They stay in the file so past applications keep their
+    history; a new asset may not cite them."""
+    out = {}
+    for m in re.finditer(r"^####\s+([A-Z0-9-]+)\s*\n<!--\s*kb:(.*?)-->", text, re.MULTILINE):
+        meta = dict(p.split("=", 1) for p in (x.strip() for x in m.group(2).split(";")) if "=" in p)
+        if meta.get("status", "").strip() == "deprecated":
+            out[m.group(1)] = meta.get("reason", "").strip() or "deprecated"
+    return out
 
 
 def numeric_tokens(text: str) -> list:
@@ -258,10 +275,11 @@ def load_knowledge():
         "skill_names": skill_names,
         "evidence_backed": evidence_backed,
         "blocks": source_blocks(master_text),
+        "deprecated": deprecated_bullets(master_text),
     }
 
 
-def validate(folder: Path):
+def validate(folder: Path, allow_deprecated: bool = False):
     issues, warnings = [], []
     jd_analysis = folder / "jd_analysis.md"
     evidence_map = folder / "evidence_map.md"
@@ -319,6 +337,11 @@ def validate(folder: Path):
     for trace_id in cv_src_ids + cv_claim_ids:
         if trace_id not in allowed_trace_ids:
             issues.append(f"Unknown CV trace ID: {trace_id}")
+    deprecated = {} if allow_deprecated else kb["deprecated"]
+    for trace_id in sorted(set(cv_src_ids + cv_claim_ids + find_trace_ids(cover_text, "claims"))):
+        if trace_id in deprecated:
+            issues.append(f"Cites deprecated bullet {trace_id} ({deprecated[trace_id]}) — "
+                          "choose another bullet, or restore it in the knowledge inbox.")
 
     for n, line in enumerate(cv_text.splitlines(), start=1):
         if line.startswith("- ") and "<!-- src:" not in line:
@@ -390,6 +413,8 @@ def validate_library(path: Path):
     for trace_id in claim_ids:
         if trace_id not in kb["allowed_trace_ids"] and trace_id not in kb["skill_names"]:
             issues.append(f"Unknown library trace ID: {trace_id}")
+        elif trace_id in kb["deprecated"]:
+            issues.append(f"Library cites deprecated bullet {trace_id} ({kb['deprecated'][trace_id]}).")
     for n, line in enumerate(text.splitlines(), start=1):
         m = re.search(r"<!--\s*(?:src|claims):([^>]+)-->", line)
         if not m:
@@ -432,6 +457,9 @@ def main() -> int:
     parser.add_argument("--folder", help="Application folder to audit.")
     parser.add_argument("--library", help="Audit a positioning/library file instead (library mode).")
     parser.add_argument("--write-log", action="store_true", help="Write audit_log.md into the folder.")
+    parser.add_argument("--allow-deprecated", action="store_true",
+                        help="Re-audit a historical folder that cites a bullet deprecated since. "
+                             "Never for a new asset.")
     args = parser.parse_args()
     if bool(args.folder) == bool(args.library):
         print("ERROR: pass exactly one of --folder or --library.", file=sys.stderr)
@@ -444,7 +472,7 @@ def main() -> int:
     if not folder.exists():
         print(f"ERROR: folder does not exist: {folder}", file=sys.stderr)
         return 1
-    overall, issues, warnings = validate(folder)
+    overall, issues, warnings = validate(folder, allow_deprecated=args.allow_deprecated)
     text = audit_log(overall, issues, warnings)
     if args.write_log:
         (folder / "audit_log.md").write_text(text, encoding="utf-8")

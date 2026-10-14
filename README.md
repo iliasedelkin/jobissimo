@@ -67,10 +67,25 @@ went.
 
 ## Install
 
+**macOS and Linux, no terminal after this line:**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/iliasedelkin/jobissimo/main/install.sh | sh
+```
+
+It puts the engine in `~/Jobissimo/engine` and your private workspace in
+`~/Jobissimo/workspace`, adds a **Jobissimo app** (macOS: `~/Applications`;
+Linux: your app menu), and opens it. The *Get started* page takes it from
+there: your agent and its sign-in, the tools (with install buttons), your
+documents (drag them in), then `/setup` in the run panel. It installs no other
+software and needs no sudo; running it again updates the engine. The one
+step it can't do for you is installing Claude Code or Codex and signing in
+once — it tells you how.
+
 New to all this? **[docs/getting-started.md](docs/getting-started.md)** walks
 through everything, from installing Claude Code or Codex to connecting the
-browser and mail to the first `/setup`. The short version, for an agent you
-already have:
+browser and mail to the first `/setup`. The chat-only way, for an agent you
+already have (and on Windows):
 
 ```sh
 git clone https://github.com/iliasedelkin/jobissimo.git
@@ -130,6 +145,17 @@ Claude Code takes them as `/name`, Codex as `$name`. Arguments are the same
 | `/refresh` | Verify open postings are still live; mark dead ones missed |
 | `/cycle` | The scheduled pass: reconcile, hunt, prepare, one report (daily or weekly) |
 | `/doctor` | Config health, value provenance, drift detection |
+
+### The local UI
+
+`python3 scripts/ui.py` opens a small local web app (127.0.0.1, stdlib only):
+an overview of what needs you, every application with its detail, your
+knowledge base with sources, usage and gaps, the pipeline's settings and
+suggested changes, and analytics. It writes only through the same scripts
+the agents use. Commands run from it in your own Claude Code or Codex — the
+agent's questions and permission requests come to you in a side panel, and
+a Settings page checks sign-in, connectors, permissions and tools. See
+[docs/ui.md](docs/ui.md).
 
 ## Running with Codex
 

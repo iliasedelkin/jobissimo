@@ -15,10 +15,17 @@ Stdlib-only conversion:
                       the file is recorded as `needs_text: true` and /setup
                       asks the user for a text version rather than guessing.
 
+A LinkedIn data export (.zip) is unpacked: its CSV/HTML/text members are
+ingested one by one.
+
 Usage:
   python3 scripts/intake.py <file-or-folder> [...]
   python3 scripts/intake.py --text "pasted content" --name "old_cover_letter"
-  python3 scripts/intake.py --list
+  python3 scripts/intake.py --upload cv.pdf < cv.pdf   # bytes on stdin (the UI)
+  python3 scripts/intake.py --list [--json]
+
+`--upload` keeps the original under _intake/originals/ — the user handed it
+over, and a later converter may read it better.
 """
 from __future__ import annotations
 
@@ -205,15 +212,85 @@ def ingest_text(text: str, name: str, entries: list) -> dict:
     return entry
 
 
+MAX_UPLOAD = 25 * 1024 * 1024
+MAX_ZIP_MEMBERS = 200
+
+
+def safe_name(name: str) -> str:
+    """A filename that cannot leave its folder."""
+    name = Path(str(name).replace("\\", "/")).name.strip()
+    name = re.sub(r"[^\w.\- ()]+", "_", name).strip(" .")
+    return name[:120] or "document"
+
+
+def ingest_upload(name: str, raw: bytes, entries: list) -> list:
+    """Save an uploaded document under _intake/originals/ and ingest it;
+    a .zip (a LinkedIn export) is unpacked and its documents ingested."""
+    name = safe_name(name)
+    suffix = Path(name).suffix.lower()
+    if suffix != ".zip" and suffix not in ACCEPTED:
+        raise ValueError(f"{suffix or 'files without an extension'} can't be read "
+                         f"(accepted: {', '.join(sorted(ACCEPTED | {'.zip'}))}).")
+    if len(raw) > MAX_UPLOAD:
+        raise ValueError("That file is over 25 MB.")
+    originals = paths.intake() / "originals"
+    originals.mkdir(parents=True, exist_ok=True)
+    target = originals / name
+    n = 1
+    while target.exists() and target.read_bytes() != raw:
+        target = originals / f"{Path(name).stem} ({n}){Path(name).suffix}"
+        n += 1
+    target.write_bytes(raw)
+    if suffix != ".zip":
+        return [ingest_file(target, entries)]
+    import io
+    import zipfile
+    out = []
+    folder = originals / Path(target.name).stem
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as z:
+            members = [m for m in z.infolist() if not m.is_dir()
+                       and Path(m.filename).suffix.lower() in ACCEPTED
+                       and not Path(m.filename).name.startswith(".")]
+            for m in members[:MAX_ZIP_MEMBERS]:
+                if m.file_size > MAX_UPLOAD:
+                    continue
+                dest = folder / safe_name(m.filename)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(z.read(m))
+                out.append(ingest_file(dest, entries))
+    except zipfile.BadZipFile:
+        raise ValueError("That .zip could not be opened.")
+    if not out:
+        raise ValueError("The .zip has no documents in it that can be read.")
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("sources", nargs="*", help="Files or folders to ingest.")
     parser.add_argument("--text", help="Ingest pasted text instead of a file.")
     parser.add_argument("--name", help="Label for --text content.")
     parser.add_argument("--list", action="store_true", help="Print the manifest and exit.")
+    parser.add_argument("--json", action="store_true", help="With --list: the manifest as JSON.")
+    parser.add_argument("--upload", metavar="NAME",
+                        help="Ingest a document read from stdin, saved under _intake/originals/NAME.")
     args = parser.parse_args()
 
     entries = read_manifest()
+    if args.list and args.json:
+        import json
+        print(json.dumps(entries, indent=2))
+        return 0
+    if args.upload:
+        try:
+            added = ingest_upload(args.upload, sys.stdin.buffer.read(MAX_UPLOAD + 1), entries)
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        write_manifest(entries)
+        print(f"Ingested {len(added)} document(s): " + ", ".join(e["src_id"] for e in added))
+        return 0
     if args.list:
         if not entries:
             print("Manifest is empty — nothing ingested yet.")

@@ -49,7 +49,7 @@ would collide with it** and do only the work:
 
 | Do | Skip |
 |---|---|
-| §1's config/positioning reads, the `db.py urls` load, and the adaptive intake rule | §1's own `RUN_ID` and `run_start` — use the caller's `$RUN_ID` |
+| §1's config/positioning reads, the `db.py urls` load, and the adaptive intake rule | §1's own `RUN_ID` and `run_start` — use the caller's `{RUN_ID}` |
 | §2 Source loop in full | — |
 | §3a–3e per qualifying posting, including every per-job `job_processed` / `job_failed` log line | — |
 | Hand your counts back to the caller | §4's `run_end`, §4's `runs/{RUN_ID}.md`, and the Stdout summary |
@@ -76,12 +76,13 @@ a caller switching sections off, not a different hunt.
 ## 1. Setup
 
 ```bash
-RUN_ID="$(date +%Y%m%d_%H%M%S)_hunt"
 python3 scripts/db.py urls            # load ALL known URLs into memory (dedupe set)
 python3 scripts/db.py dashboard       # read current inventory before setting the bar
-python3 scripts/db.py log --run-id $RUN_ID --command hunt --action run_start \
+python3 scripts/db.py run-start --command hunt \
   --detail '{"target_count": N, "max_age_days": M}'
 ```
+
+It prints the run id (`YYYYMMDD_HHMMSS_hunt`); use it as-is wherever `{RUN_ID}` appears below. Shell variables like `$RUN_ID` don't survive between separate shell calls and can't be pre-approved, so never mint the id with `date`.
 
 Read once per run: `config/targets.yaml` (the target profile and per-language
 queries), `config/boards.yaml` (the tier tables), the active pack's
@@ -301,6 +302,16 @@ python3 scripts/db.py score --job-id <id> --fit-score X.X --role-cluster PO \
 `score` sets status automatically: `no` → `discarded` (recorded, never
 revisited), `yes`/`maybe` → `shortlisted`.
 
+For `yes`/`maybe` postings, also record the benchmark taxonomy when the JD
+states it plainly — the absolute seniority of the role, the country, and the
+industry. Leave a field unset rather than guess; unknown is a valid value.
+
+```bash
+python3 scripts/db.py set-field --job-id <id> seniority_level junior|mid|senior|lead|principal|exec
+python3 scripts/db.py set-field --job-id <id> country IT          # ISO-3166, or remote_eu / remote_global
+python3 scripts/db.py set-field --job-id <id> industry fintech    # lowercase slug
+```
+
 ### 3d. Originate (only for `yes`/`maybe`)
 
 Find the posting on the employer's own site: careers page, or the underlying
@@ -352,7 +363,7 @@ or `"questions":"unknown"`).
 Log one event per job:
 
 ```bash
-python3 scripts/db.py log --run-id $RUN_ID --command hunt --job-id <id> \
+python3 scripts/db.py log --run-id {RUN_ID} --command hunt --job-id <id> \
   --action job_processed --detail '{"portal":"<slug>","recommendation":"yes","originated":true,"questions":2,"duration_s":40}'
 ```
 
@@ -365,7 +376,7 @@ policy).
 
 ```bash
 python3 scripts/db.py dashboard
-python3 scripts/db.py log --run-id $RUN_ID --command hunt --action run_end \
+python3 scripts/db.py log --run-id {RUN_ID} --command hunt --action run_end \
   --detail '{"found":N,"discarded":K,"shortlisted":M,"skipped":S,"failed":F}'
 ```
 
@@ -373,7 +384,7 @@ python3 scripts/db.py log --run-id $RUN_ID --command hunt --action run_end \
 budget, on a dead browser, on an unrecoverable error – and add the reason:
 
 ```bash
-python3 scripts/db.py log --run-id $RUN_ID --command hunt --action run_end \
+python3 scripts/db.py log --run-id {RUN_ID} --command hunt --action run_end \
   --detail '{"found":3,"discarded":1,"shortlisted":2,"skipped":0,"failed":1,"status":"aborted","reason":"time_budget"}'
 ```
 

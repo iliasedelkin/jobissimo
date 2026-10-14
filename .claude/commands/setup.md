@@ -430,7 +430,7 @@ Log it so `/optimise` can later see whether day-zero targets are
 systematically too tight:
 
 ```bash
-python3 scripts/db.py log --run-id $RUN_ID --command setup \
+python3 scripts/db.py log --run-id {RUN_ID} --command setup \
   --action first_run_criteria_loosened \
   --detail '{"axis":"seniority_band","from":"mid-senior","to":"mid"}'
 ```

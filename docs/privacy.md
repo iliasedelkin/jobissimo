@@ -23,6 +23,10 @@ contract — nothing is sent, replied to, labelled, or deleted — and the mail
 account guard verifies the connected mailbox matches your configured account
 before reading a single message.
 
+The local UI (`scripts/ui.py`) is part of this: it listens on `127.0.0.1`
+only, needs a per-launch token, loads nothing from the internet, and logs no
+requests. See [ui.md](ui.md).
+
 ## The scrub gate
 
 `scripts/scrub_check.py` is installed as a `.git/hooks/pre-commit` hook

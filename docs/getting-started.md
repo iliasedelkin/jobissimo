@@ -8,6 +8,20 @@ pasted URLs, and preparing applications is unaffected.
 Each agent-specific step is split into **Claude Code** and **Codex**. Use the
 one you run.
 
+## The quick way (macOS and Linux)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/iliasedelkin/jobissimo/main/install.sh | sh
+```
+
+Then open the **Jobissimo** app it adds (macOS: `~/Applications` — drag it
+to the Dock; Linux: your app menu). Its *Get started* page checks your agent
+and tools, takes your documents, and runs `/setup` with you in a side panel —
+steps 1, 3, 6 and 7 below, without the terminal. You still need step 2
+(install Claude Code or Codex and sign in once), and steps 4–5 if you want
+the browser and mail. Options: `sh install.sh --help`. The rest of this page
+is the manual path, and the reference for what the quick way did.
+
 ## 1. Install the basics
 
 **Python 3** (standard library only) and **git** are required. For DOCX

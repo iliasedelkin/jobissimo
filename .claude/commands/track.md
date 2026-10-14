@@ -19,12 +19,12 @@ Mint one run id for the whole interaction and log the start, so this command's
 work is visible to `/optimise` alongside every other command's:
 
 ```bash
-RUN_ID="$(date +%Y%m%d_%H%M%S)_track"
-python3 scripts/db.py log --run-id $RUN_ID --command track --action run_start \
-  --detail '{"source":"user"}'
+python3 scripts/db.py run-start --command track --detail '{"source":"user"}'
 ```
 
-When an orchestrator (`/cycle`) is driving, it supplies `$RUN_ID` and has
+It prints the run id (`YYYYMMDD_HHMMSS_track`); use it as-is wherever `{RUN_ID}` appears below. Shell variables like `$RUN_ID` don't survive between separate shell calls and can't be pre-approved, so never mint the id with `date`.
+
+When an orchestrator (`/cycle`) is driving, it supplies its run id and has
 already logged `run_start`; do not mint or log your own. Use `"source":"mail"`
 when the trigger is § Mail reconciliation rather than a user utterance.
 
@@ -134,7 +134,7 @@ After every successful scan, log the watermark — including a scan that found
 nothing, since that is what moves the window forward:
 
 ```bash
-python3 scripts/db.py log --run-id $RUN_ID --command track --action mail_scanned \
+python3 scripts/db.py log --run-id {RUN_ID} --command track --action mail_scanned \
   --detail '{"account":"<mail.account>","window_from":"YYYY-MM-DD","threads":N,"capped":false}'
 ```
 
@@ -237,7 +237,7 @@ follow-ups (the dashboard lists them). For each job:
    db.py already prints this; relay it.
 2. Log it, against the run id minted in § Setup:
    ```bash
-   python3 scripts/db.py log --run-id $RUN_ID --command track \
+   python3 scripts/db.py log --run-id {RUN_ID} --command track \
      --job-id <id> --action user_update --detail '{"said":"...","change":"..."}'
    ```
 3. Show the dashboard:
@@ -251,7 +251,7 @@ Close the run — a run with no `run_end` is invisible to `/optimise`, and
 `db.py` refuses a second one, so log it exactly once:
 
 ```bash
-python3 scripts/db.py log --run-id $RUN_ID --command track --action run_end \
+python3 scripts/db.py log --run-id {RUN_ID} --command track --action run_end \
   --detail '{"changed":N,"auto":A,"proposed":P,"status":"complete"}'
 ```
 

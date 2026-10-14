@@ -91,10 +91,10 @@ generate into a full queue silently: prepared work lost to a closed posting
 is this pipeline's largest measured waste.
 
 ```bash
-RUN_ID="$(date +%Y%m%d_%H%M%S)_prepare"
-python3 scripts/db.py log --run-id $RUN_ID --command prepare --action run_start \
-  --detail '{"selection":"..."}'
+python3 scripts/db.py run-start --command prepare --detail '{"selection":"..."}'
 ```
+
+It prints the run id (`YYYYMMDD_HHMMSS_prepare`); use it as-is wherever `{RUN_ID}` appears below. Shell variables like `$RUN_ID` don't survive between separate shell calls and can't be pre-approved, so never mint the id with `date`.
 
 Read once per run: `knowledge/master_experience.md`,
 `knowledge/skills_inventory.md`, `knowledge/education_credentials.md`,
@@ -305,8 +305,9 @@ python3 scripts/db.py set-field --job-id <id> ats_iterations <0|1|2>
 
 ```bash
 python3 scripts/export.py --folder applications/<folder>      # finals + DOCX (+PDF)
-python3 scripts/db.py set-status --job-id <id> --status generated --run-id $RUN_ID
-python3 scripts/db.py set-status --job-id <id> --status ready --run-id $RUN_ID
+python3 scripts/db.py asset record --job-id <id> --run-id {RUN_ID}  # which bullets, which text, which scorer
+python3 scripts/db.py set-status --job-id <id> --status generated --run-id {RUN_ID}
+python3 scripts/db.py set-status --job-id <id> --status ready --run-id {RUN_ID}
 ```
 
 Log per-job event: `--action job_prepared --detail

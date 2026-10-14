@@ -53,10 +53,10 @@ Whoever runs the guard logs the outcome against its own run id, so
 `/optimise` can see connector flakiness and setup problems over time:
 
 ```bash
-python3 scripts/db.py log --run-id $RUN_ID --command <cmd> --action mail_probe \
+python3 scripts/db.py log --run-id {RUN_ID} --command <cmd> --action mail_probe \
   --detail '{"outcome":"ok|mismatch|denied|error","retries":N}'
 # and, when mail is skipped for any reason:
-python3 scripts/db.py log --run-id $RUN_ID --command <cmd> --action mail_skipped \
+python3 scripts/db.py log --run-id {RUN_ID} --command <cmd> --action mail_skipped \
   --detail '{"reason":"adapter_absent|tools_not_loaded|account_guard_mismatch|permission_denied|probe_failed"}'
 ```
 

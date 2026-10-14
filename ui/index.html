@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jobissimo</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="shell">
+    <aside class="sidebar" aria-label="Primary">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">J</div>
+        <div>
+          <div class="brand-name">Jobissimo</div>
+          <div class="brand-ws" id="workspace-name">Local workspace</div>
+        </div>
+      </div>
+      <nav class="nav" id="nav"></nav>
+      <div id="agent-picker-slot"></div>
+      <div class="sidebar-foot">
+        Runs locally. Your data stays on this machine.
+        <div class="foot-actions"><button type="button" id="theme-toggle">Toggle theme</button> · <button type="button" id="quit-button">Quit</button></div>
+      </div>
+    </aside>
+    <main class="main" id="main" tabindex="-1">
+      <div class="page" id="view"><p class="loading">Loading…</p></div>
+    </main>
+  </div>
+  <div id="panel-root"></div>
+  <div id="toast-root" aria-live="polite"></div>
+</body>
+</html>
