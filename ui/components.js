@@ -186,7 +186,7 @@ export function empty(title, text, action) {
 }
 
 const CHAT_ONLY = {
-  apply: "Runs in the chat: it fills the form in your browser and stops for you before submitting. Click to copy.",
+  apply: "Runs in Claude Code only (it asks you before submitting, live). Click to copy for the chat.",
   sync: "Runs in the chat: it pushes to your private repo. Click to copy.",
 };
 

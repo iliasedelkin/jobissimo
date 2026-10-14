@@ -4,6 +4,15 @@ Fill the employer's application form with the user watching, from verified
 sources only, and **never submit autonomously**. This is a stated project
 boundary, not a preference — see README § Limits and ethics.
 
+## Input
+
+`/apply <job_id> [<job_id> …]` — one posting, or several (at most 10). With
+several, take them **one at a time, in the order given**: preconditions,
+fill, hard stop, outcome — then the next. Each posting gets its own hard stop
+and its own explicit confirmation; a confirmation never carries over, and a
+decline or a failed precondition on one does not stop the others. The
+Stdout summary repeats its block per posting.
+
 ## Preconditions (check all; refuse loudly if any fails)
 
 ```bash

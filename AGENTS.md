@@ -79,7 +79,9 @@ passed or failed, numbered with no upper limit, plus one row per offer figure.
    silently fixed. Bypass is recorded in `audit_log.md` and stays a FAIL with
    override. Truth audit is a hard gate before ATS scoring and export.
 5. **No autonomous submission.** `/apply` hard-stops before submit: filled-form
-   screenshot + field-by-field summary + explicit user confirmation. Form
+   screenshot + field-by-field summary + explicit user confirmation (started
+   from the UI: a question in the run panel; declined or unanswered never
+   submits). Several postings in one run each get their own hard stop. Form
    answers come only from `applicant_profile.yaml` + final assets +
    `knowledge/`; anything else → ask the user.
 6. **`/optimise` never touches the engine.** It proposes changes to `config/`,
@@ -131,7 +133,8 @@ passed or failed, numbered with no upper limit, plus one row per offer figure.
     Documents the user drags in go through `intake.py --upload`.
     The UI may *start* a command in the user's own Claude Code or Codex
     (`agent_runner.py`): a fixed list with validated arguments, never
-    `/apply` or `/sync`; runs that touch the same things never
+    `/sync`; `/apply` only in Claude Code, where its hard stop is a question
+    in the run panel and only the user's explicit answer submits; runs that touch the same things never
     overlap. Where a command would ask, the question (or a permission
     request) goes to the user in the run panel and only the user answers it;
     an unanswered one times out to the safe default (halt the item, never

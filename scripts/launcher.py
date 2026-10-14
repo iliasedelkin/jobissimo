@@ -181,6 +181,19 @@ def _open_url(url: str) -> None:
     webbrowser.open(url)
 
 
+def open_path(path: Path) -> None:
+    """Show a folder in Finder / the file manager. $JOBISSIMO_OPEN_CMD
+    replaces the opener (tests never open a window)."""
+    override = os.environ.get("JOBISSIMO_OPEN_CMD")
+    opener = override or {"mac": "open", "linux": "xdg-open"}.get(system())
+    if not opener or (not override and not shutil.which(opener)):
+        raise LaunchError("Opening folders works on macOS and Linux desktops only.")
+    res = subprocess.run([*shlex.split(opener), str(path)], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=15)
+    if res.returncode != 0:
+        raise LaunchError(f"Could not open {path.name}: {res.stderr.strip()[:200]}")
+
+
 def stop_ui(timeout: float = 10) -> bool:
     st = running()
     if not st:

@@ -47,8 +47,18 @@ export function setChosenAgent(agent) {
   if (sel) sel.value = agent;
 }
 
+/** The agent a command runs in: the chosen one, unless the command needs
+ *  another (/apply asks live and drives Chrome, so it is Claude Code only). */
+export function agentFor(command) {
+  const spec = agents?.commands?.[command];
+  if (!spec) return null;
+  const chosen = chosenAgent();
+  if (!spec.agents || spec.agents.includes(chosen)) return chosen;
+  return spec.agents.find((a) => agents.agents[a]?.available) || null;
+}
+
 export function canRun(command) {
-  return Boolean(agents && agents.commands[command] && chosenAgent());
+  return Boolean(agents && agents.commands[command] && agentFor(command));
 }
 
 /** The "Run with" picker for the sidebar. */
@@ -73,7 +83,7 @@ export function runButton(command, arg = null, { label, primary = false, small =
   const spec = agents.commands[command];
   return h("button", {
     type: "button", class: `btn ${primary ? "btn-accent" : ""} ${small ? "btn-sm" : ""}`,
-    title: `${spec.help} Runs in your ${agents.agents[chosenAgent()].label}.`,
+    title: `${spec.help} Runs in your ${agents.agents[agentFor(command)].label}.`,
     onclick: (e) => { e.stopPropagation(); startRun(command, arg); },
   }, icon("play"), label || spec.label);
 }
@@ -86,7 +96,7 @@ export function commandButton(cmd) {
   const spec = agents.commands[m[1]];
   return h("button", {
     type: "button", class: "chip chip-run mono",
-    title: `Run ${cmd} — ${spec.help} (in your ${agents.agents[chosenAgent()].label})`,
+    title: `Run ${cmd} — ${spec.help} (in your ${agents.agents[agentFor(m[1])].label})`,
     onclick: (e) => { e.stopPropagation(); startRun(m[1], m[2] || null); },
   }, icon("play"), cmd);
 }
@@ -97,8 +107,13 @@ export function copyChip(cmd, why) {
 }
 
 export async function startRun(command, arg = null) {
-  const agent = chosenAgent();
-  if (!agent) { toast("No agent CLI found on this machine — see Settings.", "error"); return null; }
+  const agent = agentFor(command);
+  if (!agent) {
+    const only = agents?.commands?.[command]?.agents;
+    toast(only ? `/${command} needs ${only.map((a) => agents.agents[a]?.label || a).join(" or ")} — see Settings.`
+      : "No agent CLI found on this machine — see Settings.", "error");
+    return null;
+  }
   try {
     const res = await post("/api/runs", { agent, command, arg });
     track(res.run);
@@ -111,6 +126,24 @@ export async function startRun(command, arg = null) {
     toast(e.message, "error");
     return null;
   }
+}
+
+/** Show an application folder in Finder / the file manager. */
+export async function openFolder(target) {
+  try {
+    const res = await post("/api/folders/open", target);
+    toast(res.message);
+  } catch (e) { toast(e.message, "error"); }
+}
+
+/** Prepare, or — once the folder exists — open it. */
+export function assetsButton(job, { primary = false } = {}) {
+  if (job.folder_name) {
+    return h("button", { type: "button", class: `btn btn-sm ${primary ? "btn-accent" : ""}`, title: `Open ${job.folder_name}`,
+      onclick: (e) => { e.stopPropagation(); openFolder({ job_id: job.job_id }); } }, icon("file"), "Assets");
+  }
+  if (job.status !== "shortlisted") return null;
+  return runButton("prepare", job.job_id, { label: "Prepare", primary });
 }
 
 /** Install a tool through the same dock (Settings → Tools). */
@@ -354,7 +387,7 @@ function body() {
 
 // ---------------------------------------------------------------- tray: asks + reply
 
-const traySig = (m) => `${m.status}|${(m.asks || []).map((a) => a.id).join(",")}|${m.can_reply}`;
+const traySig = (m) => `${m.status}|${(m.asks || []).map((a) => a.id).join(",")}|${m.can_reply}|${(m.folders || []).length}`;
 
 function trayEl(m) {
   const tray = h("div", { class: "dock-tray", "data-sig": traySig(m) });
@@ -364,6 +397,12 @@ function trayEl(m) {
     return tray;
   }
   if (m.status === "failed" && m.error) tray.append(h("div", { class: "tray-error" }, icon("alert"), h("span", {}, m.error)));
+  if (m.folders && m.folders.length) {
+    tray.append(h("div", { class: "tray-folders" },
+      h("span", { class: "muted" }, m.folders.length > 1 ? "Applications:" : "Application:"),
+      m.folders.map((f) => h("button", { type: "button", class: "chip", title: `Open ${f.folder}`,
+        onclick: () => openFolder({ folder: f.folder }) }, icon("file"), f.job_id || f.folder))));
+  }
   if (m.can_reply) {
     tray.append(replyBox(m));
   } else if (isBusy(m) && m.agent !== "task") {

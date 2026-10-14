@@ -19,10 +19,11 @@ own account, on this machine — exactly as typing the command would.
 - A finished run can always be continued: a reply starts the next turn in the
   same session (`claude --resume`, `codex exec resume`).
 
-Only a fixed set of commands can be started, each with validated arguments.
-`/apply` is not one of them (it fills forms in your browser and must stop for
-you before submitting), nor is /sync. Runs that touch the same
-things never overlap; others run side by side up to a limit.
+Only a fixed set of commands can be started, each with validated arguments;
+/sync is not one of them. `/apply` runs in Claude Code only: its hard stop
+before submitting is a question in the run panel, and only an explicit
+answer submits. Runs that touch the same things never overlap; others run
+side by side up to a limit.
 
     python3 scripts/agent_runner.py detect           # which agents are usable
     python3 scripts/agent_runner.py commands         # what the UI may start
@@ -65,7 +66,15 @@ def run_note(agent: str, command: str = "") -> str:
     """Appended to the agent's instructions for every UI-started run."""
     ws = str(paths.home())
     extra = ""
-    if command == "setup":
+    if command == "apply":
+        extra = (" /apply started from the UI: the hard stop before submission happens in the run panel. "
+                 "After filling a form, take the screenshot, then ask with AskUserQuestion — put the "
+                 "field-by-field summary (field → value → source) in the question, with options such as "
+                 "'I'll click submit myself', 'Click submit for me', 'Change something first', 'Don't submit'. "
+                 "Only an explicit answer submits; a declined or timed-out question means do not submit "
+                 "(leave it ready, log application_aborted). With several job ids, do them one at a time "
+                 "in the order given, each with its own hard stop — never confirm several at once.")
+    elif command == "setup":
         extra = (" Setup started from the UI: the user may already have uploaded documents there — "
                  "they are ingested in _intake/ (`python3 scripts/intake.py --list`). Read those before "
                  "asking for files, and ask only for what is missing. The user can upload more in the UI "
@@ -101,7 +110,7 @@ def run_note(agent: str, command: str = "") -> str:
     )
 
 
-# name -> spec. `arg`: None | "job_id" | "text" | "enrich" ; `locks`: what a
+# name -> spec. `arg`: None | "job_id" | "job_ids" | "text" | "enrich" | "setup"; `locks`: what a
 # run of it touches (two runs whose locks meet never run at the same time).
 COMMANDS = {
     "cycle": {"label": "Run a cycle", "help": "Reconcile mail, hunt, prepare the freshest, report.",
@@ -109,6 +118,10 @@ COMMANDS = {
               "locks": ["cycle", "hunt", "refresh", "track", "prepare:*", "browser"]},
     "hunt": {"label": "Hunt", "help": "Find, score and record new postings.",
              "arg": None, "browser": True, "long": True, "locks": ["hunt", "browser"]},
+    "apply": {"label": "Apply", "help": "Fill the employer's form in your Chrome from your verified "
+              "answers; it stops before submitting and asks you in the run panel.",
+              "arg": "job_ids", "arg_required": True, "browser": True, "long": True, "locks": None,
+              "agents": ["claude"], "conversation": True},
     "prepare": {"label": "Prepare", "help": "Generate, audit, score and export an application.",
                 "arg": "job_id", "arg_required": False, "browser": False, "long": True, "locks": None},
     "refresh": {"label": "Check postings", "help": "Verify open postings are still live.",
@@ -130,8 +143,8 @@ COMMANDS = {
     "dashboard": {"label": "Dashboard", "help": "The pipeline dashboard, read-only.",
                   "arg": None, "browser": False, "long": False, "locks": []},
 }
-NOT_FROM_UI = {"apply": "it fills your browser and must stop for you before submitting — run it in Claude Code or Codex",
-               "sync": "it pushes to a remote"}
+NOT_FROM_UI = {"sync": "it pushes to a remote"}
+MAX_APPLY = 10
 
 # Never offered to the user as a permission, never run: an agent run does not
 # start agents, open the UI, or change its own permissions.
@@ -220,6 +233,13 @@ def validate(command: str, arg: str | None) -> str | None:
         raise RunError(f"/{command} needs {'a job id' if spec['arg'] == 'job_id' else 'a message'}.")
     if arg and spec["arg"] == "job_id" and not JOB_ID_RE.fullmatch(arg):
         raise RunError("That is not a job id.")
+    if arg and spec["arg"] == "job_ids":
+        ids = list(dict.fromkeys(arg.replace(",", " ").split()))
+        if not all(JOB_ID_RE.fullmatch(i) for i in ids):
+            raise RunError("Those are not job ids.")
+        if len(ids) > MAX_APPLY:
+            raise RunError(f"Apply to at most {MAX_APPLY} postings in one run.")
+        arg = " ".join(ids)
     if arg and spec["arg"] == "setup" and not SETUP_ARG_RE.fullmatch(arg):
         raise RunError("/setup takes --resume or --stage <name>.")
     if arg and spec["arg"] == "enrich" and not ENRICH_ARG_RE.fullmatch(arg):
@@ -234,6 +254,8 @@ def validate(command: str, arg: str | None) -> str | None:
 def locks_for(command: str, arg: str | None) -> list:
     if command == "prepare":
         return [f"prepare:{arg}" if arg else "prepare:*"]
+    if command == "apply":  # one browser; and never two runs on the same posting
+        return ["browser"] + [f"apply:{i}" for i in (arg or "").split()]
     return list(COMMANDS.get(command, {}).get("locks") or [])
 
 
@@ -578,6 +600,21 @@ class Run:
     def busy(self) -> bool:
         return self.status in ("starting", "running", "needs_input")
 
+    def folders(self) -> list:
+        """Application folders this run created or changed (for an Open link)."""
+        if self.agent == "task" or self.command not in ("prepare", "cycle", "setup", "apply"):
+            return []
+        root = paths.applications()
+        out = []
+        try:
+            for d in root.iterdir():
+                if d.is_dir() and d.stat().st_mtime >= self.t0 - 2:
+                    parts = d.name.split("_")
+                    out.append({"folder": d.name, "job_id": parts[1] if len(parts) > 2 else None})
+        except OSError:
+            return []
+        return sorted(out, key=lambda f: f["folder"])
+
     def pending_asks(self) -> list:
         return [a.public() for a in self.asks.values() if a.status == "pending"]
 
@@ -590,7 +627,8 @@ class Run:
                 "summary": self.summary, "error": self.error, "exit_code": self.exit_code,
                 "stopping": self.stopping, "events": len(self.events), "asks": self.pending_asks(),
                 "can_reply": (not self.busy and bool(self.session) and self.agent in ("claude", "codex")),
-                "conversation": bool(COMMANDS.get(self.command, {}).get("conversation"))}
+                "conversation": bool(COMMANDS.get(self.command, {}).get("conversation")),
+                "folders": [] if self.busy else self.folders()}
 
     def add(self, ev: dict) -> None:
         with self.lock:
@@ -876,6 +914,10 @@ class Manager:
         info = detect().get(agent)
         if not info or not info["available"]:
             raise RunError(f"{agent} is not available on this machine.")
+        allowed = COMMANDS[command].get("agents")
+        if allowed and agent not in allowed:
+            raise RunError(f"/{command} runs in {' or '.join(detect()[a]['label'] for a in allowed)} only: "
+                           "it needs to ask you before submitting, live, and to use your Chrome.")
         with self.lock:
             self._admit(locks_for(command, arg))
             argv = build_argv(agent, command, arg)

@@ -54,8 +54,18 @@ The UI can start a command in **your own** Claude Code or Codex — the CLI you
 already use, logged in with your account, on this machine (pick one under
 *Run with* in the sidebar, or on Settings). Wherever the UI shows a command —
 `/prepare <job>`, `/hunt`, `/enrich`, an insight's lever — the chip runs it.
-`/apply` (it fills your browser and must stop for you before submitting) and
-`/sync` stay chips you copy into the chat. `/setup` runs from *Get started*:
+`/sync` stays a chip you copy into the chat.
+
+**Applying.** Each posting in Applications shows its next action: *Prepare*
+(runs `/prepare`) until its application folder exists, then *Assets* (opens
+the folder in Finder / your file manager), and *Apply* once it is ready. The
+Ready list and the Overview's ready card offer *Apply to these* — one run,
+up to ten postings, oldest first. `/apply` runs in Claude Code with your
+Chrome: it fills each form from your verified answers, then stops and asks in
+the run panel with a field-by-field summary — *I'll click submit myself*,
+*Click submit for me*, *Change something*, *Don't submit*. Only your answer
+submits; a skipped or unanswered question leaves the posting ready. After a
+run that prepared or applied, the panel links each application folder. `/setup` runs from *Get started*:
 documents you drag in there are converted by `intake.py` into `_intake/`
 before it starts, so it begins with your files already read.
 
