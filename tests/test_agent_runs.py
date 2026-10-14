@@ -144,8 +144,8 @@ def argv_log(env: dict) -> list:
 
 class TestRunnerUnits(unittest.TestCase):
     def test_only_whitelisted_commands(self):
-        for cmd, arg, msg in (("apply", "sample001", "cannot be started"), ("setup", None, "cannot be started"),
-                              ("sync", None, "cannot be started"),
+        for cmd, arg, msg in (("apply", "sample001", "cannot be started"), ("sync", None, "cannot be started"),
+                              ("setup", "--stage x; rm", "takes --resume"),
                               ("rm", None, "Unknown command"), ("prepare", "../etc", "not a job id"),
                               ("track", None, "needs a message"), ("dashboard", "x", "takes no argument"),
                               ("enrich", "x; rm", "takes a number")):
@@ -154,6 +154,8 @@ class TestRunnerUnits(unittest.TestCase):
             self.assertIn(msg, str(ctx.exception))
         self.assertEqual(agent_runner.validate("track", "Acme  rejected\nme"), "Acme rejected me")
         self.assertEqual(agent_runner.validate("enrich", "metrics"), "metrics")
+        self.assertEqual(agent_runner.validate("setup", "--resume"), "--resume")
+        self.assertIsNone(agent_runner.validate("setup", None))
 
     def test_argv_carries_the_safety_flags(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -201,6 +203,7 @@ class TestRunnerUnits(unittest.TestCase):
         self.assertTrue(P("Bash", {"command": "python3 scripts/agent_setup.py permission web_pages any"}))
         self.assertTrue(P("Bash", {"command": "claude -p hello"}))
         self.assertTrue(P("Bash", {"command": "python3 scripts/ui.py --no-open"}))
+        self.assertTrue(P("Bash", {"command": "python3 scripts/launcher.py login on"}))
         self.assertTrue(P("Write", {"file_path": "/x/repo/.claude/settings.local.json"}))
         self.assertIsNone(P("Bash", {"command": "curl -s https://example.com"}))
         self.assertIsNone(P("WebFetch", {"url": "https://example.com"}))
@@ -223,7 +226,7 @@ class TestRunnerUnits(unittest.TestCase):
     def test_agents_cannot_launch_agents_or_grant_permissions(self):
         settings = (REPO / ".claude" / "settings.json").read_text(encoding="utf-8")
         rules = (REPO / ".codex" / "rules" / "jobissimo.rules").read_text(encoding="utf-8")
-        for script in ("agent_runner.py", "agent_setup.py", "ui.py"):
+        for script in ("agent_runner.py", "agent_setup.py", "ui.py", "launcher.py"):
             self.assertNotIn(f"scripts/{script}", settings)
             self.assertNotIn(f"scripts/{script}", rules)
         self.assertIn("Bash(python3 scripts/sync.py status)", settings)  # read-only, local

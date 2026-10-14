@@ -67,6 +67,28 @@ class TestEvents(Base):
             names |= set(re.findall(r"--action ([a-z_]+)", f.read_text(encoding="utf-8")))
         self.assertEqual(names - set(events.ACTIONS), set())
 
+    def test_run_start_mints_logs_and_persists(self):
+        out = self.db("run-start", "--command", "hunt", "--detail", '{"target_count": 10}')
+        self.assertEqual(out.returncode, 0, out.stderr)
+        rid = out.stdout.splitlines()[0]
+        self.assertRegex(rid, r"^\d{8}_\d{6}_hunt$")
+        ev = self.db("last-event", "--action", "run_start").stdout
+        self.assertIn(rid, ev)
+        self.assertIn('"target_count": 10', ev)
+        # the same second twice still gives two runs
+        again = self.db("run-start", "--command", "hunt", "--run-id", rid)
+        self.assertNotEqual(again.returncode, 0)
+        out = self.db("run-start", "--command", "cycle", "--persist").stdout.splitlines()[0]
+        self.assertEqual((self.home / "runs" / ".current_run_id").read_text().strip(), out)
+        self.assertTrue((self.home / "runs" / ".current_run_start").read_text().strip().isdigit())
+        self.assertNotEqual(self.db("run-start", "--command", "x; rm").returncode, 0)
+
+    def test_command_files_never_mint_ids_in_the_shell(self):
+        for f in list((REPO / ".claude" / "commands").glob("*.md")) + list((REPO / "engine").rglob("*.md")):
+            text = f.read_text(encoding="utf-8")
+            self.assertNotIn("$RUN_ID", text.replace("`$RUN_ID` don't", ""), f.name)
+            self.assertNotIn("date +%Y%m%d", text, f.name)
+
     def test_runs_and_orphans(self):
         for run, end in (("20300110_090000_hunt", True), ("20300111_090000_prepare", False)):
             cmd = run.rsplit("_", 1)[1]

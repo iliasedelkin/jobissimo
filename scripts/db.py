@@ -1012,6 +1012,41 @@ def cmd_log(args) -> None:
     print(f"Logged: run={args.run_id} action={args.action}" + (f" job={args.job_id}" if args.job_id else ""))
 
 
+def cmd_run_start(args) -> None:
+    """Mint a run id, log `run_start`, print the id.
+
+    One plain command instead of `RUN_ID="$(date …)_hunt"` + `db.py log
+    --run-id $RUN_ID`: shell variables cannot be pre-approved in an agent's
+    permission rules (every run stopped for a manual approval), and they do
+    not survive between an agent's separate shell calls anyway. The agent
+    reads the printed id and passes it literally as --run-id afterwards.
+    """
+    if not re.fullmatch(r"[a-z][a-z0-9_-]{0,30}", args.command_name):
+        raise DbError("--command must be a command name, e.g. hunt.")
+    conn = connect()
+    run_id = args.run_id or f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.command_name}"
+    base, n = run_id, 2
+    while conn.execute("SELECT 1 FROM events WHERE run_id=? AND action='run_start' LIMIT 1",
+                       (run_id,)).fetchone():
+        if args.run_id:
+            raise DbError(f"run_start already logged for run `{run_id}`.")
+        run_id, n = f"{base}_{n}", n + 1
+    for msg in event_registry.check("run_start", args.detail):
+        print(f"# WARNING: {msg} — logged anyway.", file=sys.stderr)
+    log_event(conn, run_id=run_id, command=args.command_name, job_id=None,
+              action="run_start", detail=args.detail)
+    stamp_write(conn)
+    conn.commit()
+    if args.persist:
+        # an orchestrator's id must survive a stalled session (/cycle)
+        paths.runs().mkdir(parents=True, exist_ok=True)
+        (paths.runs() / ".current_run_id").write_text(run_id + "\n", encoding="utf-8")
+        (paths.runs() / ".current_run_start").write_text(f"{int(datetime.now().timestamp())}\n",
+                                                         encoding="utf-8")
+    print(run_id)
+    print(f"# run_start logged. Pass `--run-id {run_id}` to every later call of this run.")
+
+
 def cmd_last_event(args) -> None:
     """Most recent event with this action — a read-only watermark query.
 
@@ -2099,6 +2134,15 @@ def build_parser() -> argparse.ArgumentParser:
     lg.add_argument("--strict", action="store_true",
                     help="Refuse an action not registered in scripts/events.py (default: warn).")
     lg.set_defaults(func=cmd_log)
+
+    rs = sub.add_parser("run-start", help="Mint a run id (YYYYMMDD_HHMMSS_<command>), log run_start, "
+                                          "print the id.")
+    rs.add_argument("--command", dest="command_name", required=True, help="hunt | prepare | cycle | …")
+    rs.add_argument("--detail", help="JSON string for the run_start event")
+    rs.add_argument("--run-id", help="Use this id instead of minting one.")
+    rs.add_argument("--persist", action="store_true",
+                    help="Also write runs/.current_run_id and runs/.current_run_start (/cycle).")
+    rs.set_defaults(func=cmd_run_start)
 
     rn = sub.add_parser("runs", help="Runs from the event log: start, end, status; "
                         "orphans are runs with a run_start and no run_end.")

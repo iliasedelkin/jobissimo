@@ -63,6 +63,7 @@ imported from another install never fails validation on a historical value.
 | `ui.py` | The local UI server (127.0.0.1, token + CSRF); see [ui.md](ui.md) |
 | `agent_runner.py` | Runs a command in the user's own Claude Code / Codex for the UI; relays questions, permission requests and replies |
 | `agent_setup.py` | Checks and sets up what those runs need: sign-in, connectors, permissions, tools (the Settings page) |
+| `launcher.py` | Opens the UI without a terminal: the generated app / app-menu entry, reuse of a running UI, start at login |
 
 ## The ATS scorer, in one paragraph
 

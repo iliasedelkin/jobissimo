@@ -49,12 +49,12 @@ The portal mirror is a cache with its own expiry policy. The employer source
 ## Setup
 
 ```bash
-RUN_ID="$(date +%Y%m%d_%H%M%S)_refresh"
-python3 scripts/db.py log --run-id $RUN_ID --command refresh --action run_start \
-  --detail '{"selection":"...","mode":"check|links"}'
+python3 scripts/db.py run-start --command refresh --detail '{"selection":"...","mode":"check|links"}'
 python3 scripts/db.py list --status found --status scored --status shortlisted \
   --status generated --status ready
 ```
+
+It prints the run id (`YYYYMMDD_HHMMSS_refresh`); use it as-is wherever `{RUN_ID}` appears below. Shell variables like `$RUN_ID` don't survive between separate shell calls and can't be pre-approved, so never mint the id with `date`.
 
 ## Per job
 
@@ -87,7 +87,7 @@ python3 scripts/db.py list --status found --status scored --status shortlisted \
 ## Wrap-up
 
 ```bash
-python3 scripts/db.py log --run-id $RUN_ID --command refresh --action run_end \
+python3 scripts/db.py log --run-id {RUN_ID} --command refresh --action run_end \
   --detail '{"checked":N,"open":O,"marked_missed":M,"manual":K}'
 python3 scripts/db.py dashboard
 ```

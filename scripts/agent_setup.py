@@ -216,7 +216,7 @@ PREFS = {
 
 
 def prefs_path() -> Path:
-    return paths.config_dir() / "local" / "agents.json"
+    return paths.local_dir() / "agents.json"
 
 
 def load_prefs() -> dict:

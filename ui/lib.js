@@ -45,9 +45,22 @@ export function s(tag, attrs, ...children) {
 // ---------------------------------------------------------------- API
 
 let csrf = null;
+let offlineHandler = null;
+
+/** Called when the server can't be reached (stopped, or the app quit). */
+export function onOffline(fn) { offlineHandler = fn; }
+
+async function reach(path, init) {
+  try {
+    return await fetch(path, init);
+  } catch (e) {
+    if (offlineHandler) offlineHandler();
+    throw new Error("Jobissimo isn't running — open it again from the app.");
+  }
+}
 
 export async function session() {
-  const res = await fetch("/api/session", { credentials: "same-origin" });
+  const res = await reach("/api/session", { credentials: "same-origin" });
   if (res.status === 401) throw new AuthError();
   const data = await res.json();
   csrf = data.csrf;
@@ -57,7 +70,7 @@ export async function session() {
 export class AuthError extends Error {}
 
 export async function get(path) {
-  const res = await fetch(path, { credentials: "same-origin" });
+  const res = await reach(path, { credentials: "same-origin" });
   if (res.status === 401) throw new AuthError();
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
@@ -65,7 +78,7 @@ export async function get(path) {
 }
 
 export async function post(path, body) {
-  const res = await fetch(path, {
+  const res = await reach(path, {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf || "" },
@@ -74,6 +87,20 @@ export async function post(path, body) {
   if (res.status === 401) throw new AuthError();
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+/** Upload one file's bytes as-is (documents for /setup). */
+export async function upload(path, file) {
+  const res = await reach(`${path}?name=${encodeURIComponent(file.name)}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/octet-stream", "X-CSRF-Token": csrf || "" },
+    body: file,
+  });
+  if (res.status === 401) throw new AuthError();
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
   return data;
 }
 

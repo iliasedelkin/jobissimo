@@ -128,17 +128,18 @@ passed or failed, numbered with no upper limit, plus one row per offer figure.
     through the inbox (`knowledge.py propose`); an agent proposes, the user
     accepts — `knowledge.py decide` runs only on the user's explicit word.
     Every config change carries a reason (`config.py set --reason`).
+    Documents the user drags in go through `intake.py --upload`.
     The UI may *start* a command in the user's own Claude Code or Codex
     (`agent_runner.py`): a fixed list with validated arguments, never
-    `/apply`, `/setup` or `/sync`; runs that touch the same things never
+    `/apply` or `/sync`; runs that touch the same things never
     overlap. Where a command would ask, the question (or a permission
     request) goes to the user in the run panel and only the user answers it;
     an unanswered one times out to the safe default (halt the item, never
     bypass, never submit, never accept a knowledge item). Edits without
     asking stop at the workspace. What runs may do without asking is set by
     the user on the Settings page (`agent_setup.py`, writing Claude Code's
-    own `.claude/settings.local.json`). `agent_runner.py`, `agent_setup.py`
-    and `ui.py` are deliberately off both allowlists, and a run asking to
+    own `.claude/settings.local.json`). `agent_runner.py`, `agent_setup.py`,
+    `launcher.py` and `ui.py` are deliberately off both allowlists, and a run asking to
     start an agent or change agent settings is refused without asking: an
     agent never launches another agent or grants itself permissions.
 
@@ -175,17 +176,20 @@ the shipped config templates live in `templates/config/` (see `docs/sync.md`).
 | `engine/schemas/` | JSON Schema for the config files |
 | `packs/product/` | The reference domain pack (roles, evaluation, ATS lexicons, boards, en/it locales verified + de/fr/es/nl/pt stubs) |
 | `packs/generic/` | Minimal fallback; taxonomy generated at setup |
-| `scripts/` | db.py, audit.py, ats_score.py, export.py, paths.py, packs.py, sync.py, intake.py, competency_map.py, coverage.py, setup_check.py, scrub_check.py, migrate.py, events.py, assets.py, knowledge.py, config.py, readmodel.py, insights.py, ui.py, agent_runner.py, agent_setup.py (all have `--help`) |
+| `scripts/` | db.py, audit.py, ats_score.py, export.py, paths.py, packs.py, sync.py, intake.py, competency_map.py, coverage.py, setup_check.py, scrub_check.py, migrate.py, events.py, assets.py, knowledge.py, config.py, readmodel.py, insights.py, ui.py, agent_runner.py, agent_setup.py, launcher.py (all have `--help`) |
 | `templates/` | ats_reference.docx (clean metadata), knowledge scaffolds, `config/*.example.yaml` (shipped config templates), `workspace.gitignore` (written by `/sync init`) |
 | `config/` (workspace) | GITIGNORED ENTIRELY — identity, targets, languages, boards, capabilities; lives in `$JOBISSIMO_HOME`, resolved via `$JOBISSIMO_CONFIG` → `<workspace>/config` → legacy `<repo>/config` |
 | `profile/` | GITIGNORED ENTIRELY — `$JOBISSIMO_HOME` (resolved via `$JOBISSIMO_HOME` → `.jobissimo` pointer → default): `config/`, `_intake/`, `knowledge/`, `positioning/`, `competency_map.md`, `applicant_profile.yaml`, `setup_state.yaml`, `jd_texts/`, `applications/`, `runs/`, `reports/`, `state/pipeline.db` (+ `state/backup/*.csv`, the committed record) |
 | `ui/` | The local UI: static HTML/CSS + vanilla JS modules, no build step, served by `scripts/ui.py` |
+| `install.sh` | macOS/Linux installer: engine + private workspace + the Jobissimo app, then opens it |
 | `fixtures/`, `tests/` | Synthetic candidate (Sam Rivera) + JDs; offline test suite |
 
 ## Scripts
 
 - `python3 scripts/db.py <cmd>` — add-job, score, set-status, set-field,
-  list, get, next-id, urls, log, dashboard, stats, export-csv. Validates
+  list, get, next-id, urls, run-start, log, dashboard, stats, export-csv.
+  `run-start --command <cmd>` mints the run id and logs `run_start`; the
+  agent passes the printed id literally — never a `$RUN_ID` shell variable. Validates
   enums and transitions; role clusters and location-fit values validate
   against pack ∪ config UNION values already in the DB, so imported
   historical rows never fail. Refuses bad input loudly.
@@ -216,7 +220,10 @@ the shipped config templates live in `templates/config/` (see `docs/sync.md`).
   `agent_runner.py` (runs of a command in the user's own Claude Code / Codex
   for the UI — questions, permission requests and replies go to the user;
   transcripts in `state/agent_runs/`, never synced), `agent_setup.py` (the
-  Settings page: agent sign-in, connectors, run permissions, tools).
+  Settings page: agent sign-in, connectors, run permissions, tools),
+  `launcher.py` (open the UI without a terminal: the generated app /
+  app-menu entry, reuse of a running UI, start at login); `install.sh` at the
+  repo root installs engine + workspace + app on macOS/Linux.
 - `paths.py` resolves `$JOBISSIMO_HOME`; `packs.py` loads packs + config;
   `intake.py` converts documents to text; `competency_map.py` / `coverage.py`
   build the map + strength ledger; `setup_check.py` validates config;

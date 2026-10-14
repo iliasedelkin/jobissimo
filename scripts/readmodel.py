@@ -717,6 +717,49 @@ def suggestions_view(ctx=None) -> dict:
             "latest_report": reports[-1].name if reports else None}
 
 
+# /setup's checkpoints (setup_state.yaml), in order, with the user's words for them
+SETUP_STAGES = [
+    ("preflight", "Check this machine"), ("intake", "Read your documents"),
+    ("extract", "Build your knowledge base"), ("confirm", "Confirm what was read"),
+    ("identity", "Identity and logistics"), ("languages", "Languages and markets"),
+    ("targets", "What you want, and where"), ("positioning", "Your positioning"),
+    ("boards", "Where to look"),
+]
+
+
+def onboarding_view(ctx=None) -> dict:
+    """Where this workspace stands on the way to a first result."""
+    ctx = ctx or Ctx()
+    home, source = paths.home_with_source()
+    state = packs.load_yaml(paths.setup_state()) if paths.setup_state().exists() else {}
+    recorded = (state or {}).get("stages") or {}
+    stages = []
+    for key, label in SETUP_STAGES:
+        rec = recorded.get(key) if isinstance(recorded.get(key), dict) else {}
+        stages.append({"id": key, "label": label, "status": rec.get("status") or "pending",
+                       "at": rec.get("at")})
+    done = sum(st["status"] in ("done", "deferred") for st in stages)
+    try:
+        import intake
+        docs = intake.read_manifest()
+    except Exception:
+        docs = []
+    know = paths.knowledge() / "master_experience.md"
+    roles = len(re.findall(r"(?m)^## ROLE:", know.read_text(encoding="utf-8"))) if know.exists() else 0
+    return {
+        "workspace": {"path": str(home), "source": source, "git": (home / ".git").exists(),
+                      "separate": not str(source).startswith("default")},
+        "documents": [{"src_id": d.get("src_id"), "name": d.get("original"), "format": d.get("format"),
+                       "language": d.get("language"), "words": d.get("words"),
+                       "needs_text": bool(d.get("needs_text"))} for d in docs],
+        "setup": {"stages": stages, "done": done, "total": len(stages),
+                  "started": bool(recorded), "complete": done == len(stages)},
+        "knowledge": {"roles": roles},
+        "jobs": len(ctx.jobs),
+        "complete": done == len(stages) and roles > 0,
+    }
+
+
 def insights_view(ctx=None) -> list:
     ctx = ctx or Ctx()
     return insights_mod.diagnose(analytics(ctx), overview(ctx))
@@ -733,6 +776,7 @@ VIEWS = {
     "pipeline": lambda a: pipeline_view(),
     "suggestions": lambda a: suggestions_view(),
     "insights": lambda a: insights_view(),
+    "onboarding": lambda a: onboarding_view(),
 }
 
 

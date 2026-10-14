@@ -54,12 +54,13 @@ answer in a field. If the user wants the answer reused in future, add it to
 
 ```bash
 python3 scripts/db.py set-status --job-id <id> --status applied --applied-via employer_site
-python3 scripts/db.py log --run-id $RUN_ID --command apply --job-id <id> \
+python3 scripts/db.py log --run-id {RUN_ID} --command apply --job-id <id> \
   --action application_submitted \
   --detail '{"platform":"greenhouse","fields":{"field":"value-source pairs"},"submitted_by":"user"}'
 ```
 
-(`RUN_ID="$(date +%Y%m%d_%H%M%S)_apply"`; also log `run_start`, any
+(Start with `python3 scripts/db.py run-start --command apply`, which prints the
+run id used as `{RUN_ID}` above; also log any
 `question_escalated` events with the question + user's answer, and `run_end`.)
 
 7. If the user declines at the hard stop: leave status `ready`, log

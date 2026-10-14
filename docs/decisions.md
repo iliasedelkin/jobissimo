@@ -335,6 +335,42 @@ workspace (`acceptEdits` + the real workspace listed in
 - `sync.py status` (local, read-only) joined both allowlists; `ui.py` left
   them — an agent that could start the UI could start agents through it.
 
+## Opening it without a terminal: launcher, installer, onboarding (2026-10)
+
+The UI made the pipeline usable without chat, but reaching it still took a
+clone, a terminal and an exported path. Three pieces close that, macOS and
+Linux first.
+
+- **A generated app, not a packaged one.** `launcher.py install-app` writes
+  `~/Applications/Jobissimo.app` (a shell stub, an Info.plist, an icon
+  rendered from `ui/icon.svg` with the tools macOS ships) or a Linux
+  `.desktop` entry. Built on the machine, it is never quarantined — a
+  downloaded app would need signing and notarisation — and it needs no
+  toolchain. Electron/Tauri were rejected for the same reason the UI has no
+  build step.
+- **Reuse, then idle out.** `ui.py` records its port, pid and token in the
+  workspace's `config/local/ui_server.json` (owner-only, never synced). The
+  app reuses a live server or starts one in the background with
+  `--idle-exit 30`; an open page pings once a minute, a running agent counts
+  as activity. Quit is in the page because there is no terminal to Ctrl+C.
+  `config/local/` sits under the workspace from the first launch so the
+  file cannot move when /setup later creates the rest of `config/`.
+- **The installer installs Jobissimo, nothing else.** No sudo, no package
+  manager calls, no agent CLI: those are the user's to choose and sign in
+  to, and the page's Settings checks offer the tool installs with a click.
+  Engine and workspace are siblings under `~/Jobissimo`, with the
+  `.jobissimo` pointer written up front, so /setup's "workspace first" gate
+  is already satisfied.
+- **Onboarding is a page over the same commands.** Documents dropped in go
+  through `intake.py --upload` (zips unpacked, originals kept in
+  `_intake/originals/`); `/setup` is now startable from the UI because runs
+  can ask questions; progress comes from `setup_state.yaml`. Nothing about
+  /setup's contract changed — the run is told the documents are already
+  ingested.
+- **Run ids are minted by `db.py run-start`**, not `RUN_ID="$(date …)"`: a
+  shell variable can't be pre-approved in an agent's permission rules, so
+  every UI-started run stopped at its first command for an approval.
+
 ## Deferred improvements (behaviour left as-is on purpose)
 
 - `coverage.py`'s profile strength score is deliberately blunt (movement, not

@@ -8,6 +8,7 @@ import { icon } from "../icons.js";
 import { pageHead, sectionHead, segmented } from "../components.js";
 import { render as rerender } from "../app.js";
 import { chosenAgent, setChosenAgent, startInstall, loadAgents, onRunFinished } from "../agent.js";
+import { launcherCall } from "./welcome.js";
 
 let refreshNext = false;
 let hooked = false;
@@ -39,6 +40,7 @@ export async function render() {
   page.append(permissionsSection(s));
   page.append(prefsSection(s));
   page.append(toolsSection(s));
+  page.append(computerSection(s.launcher));
 
   page.append(h("div", { class: "section" }, sectionHead("Workspace"),
     h("div", { class: "rows" },
@@ -201,6 +203,27 @@ function prefsSection(s) {
       group("Claude Code", ["claude.model", "claude.effort", "claude.chrome"]),
       group("Codex", ["codex.reasoning_effort", "codex.network", "codex.web_search"]),
       group("Runs", ["runs.max_parallel", "runs.ask_timeout_min"])));
+}
+
+function computerSection(l) {
+  if (!l) return null;
+  const isMac = l.os === "mac";
+  const rows = [];
+  if (l.app.supported) {
+    rows.push(kv(isMac ? "Jobissimo app" : "App-menu entry",
+      h("div", { class: "toolbar", style: { margin: 0 } },
+        l.app.installed ? h("span", { class: "mono muted" }, l.app.path) : h("span", { class: "muted" }, "Not added"),
+        h("button", { type: "button", class: "btn btn-sm", onclick: () => launcherCall("app", { action: "install" }) }, l.app.installed ? "Reinstall" : "Add"),
+        l.app.installed ? h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: () => launcherCall("app", { action: "uninstall" }) }, "Remove") : null),
+      "Opens this page without a terminal, starting it if needed; it stops by itself after 30 minutes with no page open and no run. Reinstall after moving the workspace."));
+    rows.push(kv("Start at login",
+      h("label", { class: "switch" }, h("input", { type: "checkbox", checked: l.login.on, onchange: (e) => launcherCall("login", { on: e.target.checked }) }),
+        h("span", {}, l.login.on ? "On — runs in the background, opens instantly" : "Off")),
+      "Keeps it running in the background from login, so the app opens instantly."));
+  }
+  rows.push(kv("Quit", h("button", { type: "button", class: "btn btn-sm", onclick: () => document.getElementById("quit-button").click() }, "Quit Jobissimo"),
+    `Stops this page's server${l.pid ? ` (pid ${l.pid})` : ""} and any runs. Log: ${l.log}`));
+  return h("div", { class: "section" }, sectionHead("This computer"), h("div", { class: "rows" }, rows));
 }
 
 function toolsSection(s) {

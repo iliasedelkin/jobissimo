@@ -67,10 +67,25 @@ went.
 
 ## Install
 
+**macOS and Linux, no terminal after this line:**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/iliasedelkin/jobissimo/main/install.sh | sh
+```
+
+It puts the engine in `~/Jobissimo/engine` and your private workspace in
+`~/Jobissimo/workspace`, adds a **Jobissimo app** (macOS: `~/Applications`;
+Linux: your app menu), and opens it. The *Get started* page takes it from
+there: your agent and its sign-in, the tools (with install buttons), your
+documents (drag them in), then `/setup` in the run panel. It installs no other
+software and needs no sudo; running it again updates the engine. The one
+step it can't do for you is installing Claude Code or Codex and signing in
+once — it tells you how.
+
 New to all this? **[docs/getting-started.md](docs/getting-started.md)** walks
 through everything, from installing Claude Code or Codex to connecting the
-browser and mail to the first `/setup`. The short version, for an agent you
-already have:
+browser and mail to the first `/setup`. The chat-only way, for an agent you
+already have (and on Windows):
 
 ```sh
 git clone https://github.com/iliasedelkin/jobissimo.git

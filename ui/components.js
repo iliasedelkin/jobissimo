@@ -187,7 +187,6 @@ export function empty(title, text, action) {
 
 const CHAT_ONLY = {
   apply: "Runs in the chat: it fills the form in your browser and stops for you before submitting. Click to copy.",
-  setup: "Runs in the chat for now. Click to copy.",
   sync: "Runs in the chat: it pushes to your private repo. Click to copy.",
 };
 

@@ -1,7 +1,8 @@
 # The local UI
 
 ```bash
-python3 scripts/ui.py            # prints a one-time link and opens it
+python3 scripts/launcher.py open   # what the Jobissimo app runs: reuse or start, then open
+python3 scripts/ui.py              # the same from a terminal: prints a one-time link and opens it
 python3 scripts/ui.py --no-open --port 8765
 ```
 
@@ -20,6 +21,7 @@ setting with a reason, and answering a run's questions.
 
 | Screen | For |
 |---|---|
+| **Get started** | Shown until /setup is complete: your agent and its sign-in, tools, your documents (drag them in), /setup in the run panel, a first /hunt |
 | **Overview** | What needs you now (offers, follow-ups, the ready queue, inbox), three numbers for the week, live processes, the top insights |
 | **Applications** | Every posting by stage, with a detail panel: properties, rounds, the requirements matched, the knowledge each CV cited, the timeline, and the actions (mark applied, record a reply or round, settle a round, close) |
 | **Knowledge** | *Inbox* of agent proposals; *Experience* — every achievement with its source, its usage across applications and, once 8+ sent applications cite it, its reply rate vs your average; *Skills*; *Gaps* — requirements jobs keep asking for that you have no evidence for |
@@ -27,14 +29,35 @@ setting with a reason, and answering a run's questions.
 | **Analytics** | The funnel as a story, applications per week, reply rates by source / fit / ATS score / positioning / language with 95% intervals, time to reply, rounds |
 | **Settings** | Agents and their sign-in, what runs may do without asking, run preferences, local tools — each problem with its fix |
 
+## Opening it without a terminal
+
+`install.sh` (or `python3 scripts/launcher.py install-app`, or *Settings →
+This computer*) adds a **Jobissimo app**: `~/Applications/Jobissimo.app` on
+macOS, an app-menu entry on Linux. Opening it reuses the UI already serving
+your workspace, or starts one in the background, and opens the browser
+signed in. A UI the app started stops by itself after 30 minutes with no page
+open and no run going (an open page pings once a minute). *Quit* in the
+sidebar stops it — and any runs, after asking. *Start at login* (Settings)
+keeps one running in the background from login.
+
+The app is generated on your machine, so macOS has nothing to quarantine. It
+carries the Python and PATH of the shell that created it, and
+`JOBISSIMO_HOME`/`JOBISSIMO_CONFIG` if that shell set them (a scratch copy);
+otherwise the engine's `.jobissimo` pointer finds your workspace. Re-add it
+after moving things. Its state — the running server's port, pid and sign-in
+token, run preferences, the log — lives in the workspace's `config/local/`,
+owner-only and never synced.
+
 ## Running commands
 
 The UI can start a command in **your own** Claude Code or Codex — the CLI you
 already use, logged in with your account, on this machine (pick one under
 *Run with* in the sidebar, or on Settings). Wherever the UI shows a command —
 `/prepare <job>`, `/hunt`, `/enrich`, an insight's lever — the chip runs it.
-`/apply` (it fills your browser and must stop for you before submitting),
-`/setup` and `/sync` stay chips you copy into the chat.
+`/apply` (it fills your browser and must stop for you before submitting) and
+`/sync` stay chips you copy into the chat. `/setup` runs from *Get started*:
+documents you drag in there are converted by `intake.py` into `_intake/`
+before it starts, so it begins with your files already read.
 
 A panel in the corner shows the runs. Collapsed, it is a status line.
 Expanded, it is each run's activity as it happens — its thinking (folded),

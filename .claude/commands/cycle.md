@@ -55,12 +55,18 @@ reads the resolved numbers, never the config again.
 
 ## 0. Skeleton first
 
-In **one** bash call: set `RUN_ID="$(date +%Y%m%d_%H%M%S)_cycle"`, persist it
-and the start epoch to `runs/.current_run_id` / `runs/.current_run_start`
+First, one plain command mints the run id, logs `run_start`, and persists the
+id and start epoch to `runs/.current_run_id` / `runs/.current_run_start`
 (never keep the run id only in your own context — that is exactly what a stall
-destroys), log `run_start` (`--command cycle --detail
-'{"source":"cycle","intensity":"daily","hunt_target":10,"prepare_count":2}'`),
-and write `runs/cycle_YYYY-MM-DD.md`:
+destroys):
+
+```bash
+python3 scripts/db.py run-start --command cycle --persist \
+  --detail '{"source":"cycle","intensity":"daily","hunt_target":10,"prepare_count":2}'
+```
+
+It prints the id; use it as-is wherever `{RUN_ID}` appears below. Then write
+`runs/cycle_YYYY-MM-DD.md`:
 
 ```
 # Cycle — {date}
@@ -214,7 +220,7 @@ One bash call: log `run_end` with the real numbers, then release the lock by
 overwriting its markers.
 
 ```bash
-python3 scripts/db.py log --run-id $RUN_ID --command cycle --action run_end \
+python3 scripts/db.py log --run-id {RUN_ID} --command cycle --action run_end \
   --detail '{"intensity":"daily","found":N,"shortlisted":M,
              "reconciled_auto":A,"reconciled_proposed":P,
              "liveness_checked":L,"marked_missed":X,

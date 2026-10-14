@@ -1,5 +1,5 @@
 // Jobissimo local UI — hash router and shell.
-import { h, session, get, AuthError, toast } from "./lib.js";
+import { h, session, get, post, AuthError, toast, onOffline } from "./lib.js";
 import { icon } from "./icons.js";
 import { closePanel } from "./components.js";
 import { initDock, resumeActive, agentPicker, onRunFinished } from "./agent.js";
@@ -9,8 +9,12 @@ import * as knowledge from "./views/knowledge.js";
 import * as pipeline from "./views/pipeline.js";
 import * as analytics from "./views/analytics.js";
 import * as settings from "./views/settings.js";
+import * as welcome from "./views/welcome.js";
+
+let onboarded = true;   // from /api/session; "Get started" shows until setup is complete
 
 const ROUTES = [
+  { id: "welcome", label: "Get started", view: welcome, hidden: () => onboarded },
   { id: "overview", label: "Overview", view: overview },
   { id: "applications", label: "Applications", view: applications },
   { id: "knowledge", label: "Knowledge", view: knowledge },
@@ -45,9 +49,9 @@ let navCounts = {};
 
 function drawNav(active) {
   const nav = document.getElementById("nav");
-  nav.replaceChildren(...ROUTES.map((r) => h("a", {
+  nav.replaceChildren(...ROUTES.filter((r) => !(r.hidden && r.hidden()) || r.id === active).map((r) => h("a", {
     href: `#/${r.id}`, "aria-current": r.id === active ? "page" : null, class: r.foot ? "nav-foot" : null,
-  }, icon(r.id), h("span", { class: "label" }, r.label),
+  }, icon(r.id === "welcome" ? "spark" : r.id), h("span", { class: "label" }, r.label),
   navCounts[r.id] ? h("span", { class: "count", "aria-label": `${navCounts[r.id]} to review` }, navCounts[r.id]) : null)));
 }
 
@@ -82,11 +86,52 @@ export async function render() {
   }
 }
 
+export function setOnboarded(v) { onboarded = v; drawNav(parseRoute().id); }
+
+// ---------------------------------------------------------------- lifetime: heartbeat, quit, offline
+
+let stopped = false;
+
+function heartbeat() {
+  // an open page keeps an app-started UI alive (it stops after 30 idle minutes)
+  const beat = () => { if (document.visibilityState === "visible" && !stopped) get("/api/ping").catch(() => {}); };
+  setInterval(beat, 60000);
+  document.addEventListener("visibilitychange", beat);
+}
+
+function showStopped(byQuit) {
+  if (stopped) return;
+  stopped = true;
+  document.getElementById("agent-dock")?.setAttribute("hidden", "");
+  document.getElementById("view").replaceChildren(
+    h("div", { class: "page-head" }, h("div", {},
+      h("h1", {}, byQuit ? "Jobissimo has stopped" : "Jobissimo isn't running"),
+      h("p", {}, "Open it again from the Jobissimo app — or run python3 scripts/launcher.py open. Everything is saved."))));
+  document.title = "Stopped · Jobissimo";
+}
+
+async function quit(force = false) {
+  const btn = document.getElementById("quit-button");
+  try {
+    await post("/api/quit", { force });
+    showStopped(true);
+  } catch (e) {
+    if (/still running/.test(e.message) && !force) {
+      toast(`${e.message} Click Quit again within 5 seconds to stop them and quit.`, "error");
+      btn.textContent = "Stop runs and quit";
+      btn.onclick = () => quit(true);
+      setTimeout(() => { btn.textContent = "Quit"; btn.onclick = () => quit(false); }, 5000);
+    } else if (!stopped) {
+      toast(e.message, "error");
+    }
+  }
+}
+
 function signedOut() {
   document.getElementById("view").replaceChildren(
     h("div", { class: "page-head" }, h("div", {},
-      h("h1", {}, "Open Jobissimo from your terminal"),
-      h("p", {}, "This page needs the one-time link printed by python3 scripts/ui.py. Restart it if the link has expired."))));
+      h("h1", {}, "Open Jobissimo from the app"),
+      h("p", {}, "This page signs in through a one-time link. Open Jobissimo from its app (or run python3 scripts/launcher.py open) for a fresh one."))));
 }
 
 function initTheme() {
@@ -107,12 +152,17 @@ async function start() {
   try {
     const s = await session();
     document.getElementById("workspace-name").textContent = s.workspace;
+    onboarded = s.onboarding_complete !== false;
+    if (!onboarded && !location.hash.replace(/^#\/?/, "")) location.replace("#/welcome");
   } catch (e) {
     drawNav("overview");
     if (e instanceof AuthError) return signedOut();
     toast(e.message, "error");
   }
   window.addEventListener("hashchange", () => { closePanel(); render(); document.getElementById("main").focus({ preventScroll: true }); });
+  onOffline(() => showStopped(false));
+  document.getElementById("quit-button").onclick = () => quit(false);
+  heartbeat();
   initDock();
   await resumeActive();   // agents first, so views can show Run buttons
   document.getElementById("agent-picker-slot").replaceChildren(agentPicker());

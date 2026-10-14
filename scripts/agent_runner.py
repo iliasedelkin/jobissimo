@@ -21,7 +21,7 @@ own account, on this machine — exactly as typing the command would.
 
 Only a fixed set of commands can be started, each with validated arguments.
 `/apply` is not one of them (it fills forms in your browser and must stop for
-you before submitting), nor are /setup and /sync. Runs that touch the same
+you before submitting), nor is /sync. Runs that touch the same
 things never overlap; others run side by side up to a limit.
 
     python3 scripts/agent_runner.py detect           # which agents are usable
@@ -55,14 +55,21 @@ EXTRA_BIN_DIRS = ["/opt/homebrew/bin", "/usr/local/bin", str(Path.home() / ".loc
                   str(Path.home() / ".npm-global/bin"), str(Path.home() / ".bun/bin")]
 JOB_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
 ENRICH_ARG_RE = re.compile(r"\d{1,2}|metrics|skills|targets|identity")
+SETUP_ARG_RE = re.compile(r"--resume|--stage [a-z_]{2,20}")
 OUTPUT_CAP = 6000   # characters of tool output kept per step for the UI
 TEXT_CAP = 20000
 RUN_ID_RE = r"ui_\d{8}_\d{6}_[a-z]+_[0-9a-f]{4}"
 
 
-def run_note(agent: str) -> str:
+def run_note(agent: str, command: str = "") -> str:
     """Appended to the agent's instructions for every UI-started run."""
     ws = str(paths.home())
+    extra = ""
+    if command == "setup":
+        extra = (" Setup started from the UI: the user may already have uploaded documents there — "
+                 "they are ingested in _intake/ (`python3 scripts/intake.py --list`). Read those before "
+                 "asking for files, and ask only for what is missing. The user can upload more in the UI "
+                 "(Get started → Your documents) and tell you when they have.")
     common = (
         f"You were started from the Jobissimo local UI. The workspace for this run is {ws} "
         "($JOBISSIMO_HOME): read and write workspace files only there — never in another workspace, "
@@ -71,6 +78,7 @@ def run_note(agent: str) -> str:
         "item unless the user chose exactly that in an answer. End with the command's stdout summary; "
         "list anything still open under a 'Needs your decision' heading."
     )
+    common += extra
     if agent == "claude":
         return common + (
             " The user watches this run in a side panel and can answer you. Where the command says to "
@@ -113,18 +121,22 @@ COMMANDS = {
                "locks": ["knowledge"], "conversation": True},
     "optimise": {"label": "Optimise", "help": "Analyse outcomes and propose changes for you to decide.",
                  "arg": None, "browser": False, "long": True, "locks": ["optimise"]},
+    "setup": {"label": "Set up", "help": "Your documents into a knowledge base, your targets, "
+              "and a first audited application — about 25 minutes, in the run panel.",
+              "arg": "setup", "arg_required": False, "browser": True, "long": True, "conversation": True,
+              "locks": ["setup", "knowledge", "hunt", "prepare:*", "browser"]},
     "doctor": {"label": "Health check", "help": "Config health, provenance and drift.",
                "arg": None, "browser": False, "long": False, "locks": []},
     "dashboard": {"label": "Dashboard", "help": "The pipeline dashboard, read-only.",
                   "arg": None, "browser": False, "long": False, "locks": []},
 }
 NOT_FROM_UI = {"apply": "it fills your browser and must stop for you before submitting — run it in Claude Code or Codex",
-               "setup": "onboarding runs in the chat for now", "sync": "it pushes to a remote"}
+               "sync": "it pushes to a remote"}
 
 # Never offered to the user as a permission, never run: an agent run does not
 # start agents, open the UI, or change its own permissions.
 PROTECTED_COMMAND = re.compile(
-    r"(agent_runner|agent_setup|ui)\.py\b|(^|[\s;&|(`])(claude|codex)(\s|$)|settings(\.local)?\.json")
+    r"(agent_runner|agent_setup|launcher|ui)\.py\b|(^|[\s;&|(`])(claude|codex)(\s|$)|settings(\.local)?\.json")
 PROTECTED_PATH = re.compile(r"(^|/)\.claude/|(^|/)\.codex/|(^|/)\.claude\.json$|(^|/)config/local/")
 
 
@@ -208,6 +220,8 @@ def validate(command: str, arg: str | None) -> str | None:
         raise RunError(f"/{command} needs {'a job id' if spec['arg'] == 'job_id' else 'a message'}.")
     if arg and spec["arg"] == "job_id" and not JOB_ID_RE.fullmatch(arg):
         raise RunError("That is not a job id.")
+    if arg and spec["arg"] == "setup" and not SETUP_ARG_RE.fullmatch(arg):
+        raise RunError("/setup takes --resume or --stage <name>.")
     if arg and spec["arg"] == "enrich" and not ENRICH_ARG_RE.fullmatch(arg):
         raise RunError("/enrich takes a number or one of: metrics, skills, targets, identity.")
     if arg and spec["arg"] == "text":
@@ -257,7 +271,7 @@ def claude_argv(command: str, resume: str | None = None) -> list:
     argv = [binary, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
             "--permission-prompt-tool", "stdio", "--permission-mode", "default",
             "--add-dir", ws, "--allowedTools", *tools,
-            "--append-system-prompt", run_note("claude")]
+            "--append-system-prompt", run_note("claude", command)]
     if COMMANDS.get(command, {}).get("browser") and prefs["claude.chrome"]:
         argv.append("--chrome")
     if prefs["claude.model"]:
@@ -269,7 +283,7 @@ def claude_argv(command: str, resume: str | None = None) -> list:
     return argv
 
 
-def codex_argv(prompt: str, resume: str | None = None) -> list:
+def codex_argv(prompt: str, resume: str | None = None, command: str = "") -> list:
     binary = resolve("codex")
     if not binary:
         raise RunError("codex is not installed or not on PATH.")
@@ -286,7 +300,7 @@ def codex_argv(prompt: str, resume: str | None = None) -> list:
         return [binary, "exec", "resume", "--json", "-c", 'sandbox_mode="workspace-write"',
                 "-c", f"sandbox_workspace_write.writable_roots={json.dumps([ws])}", *conf, resume, prompt]
     return [binary, "exec", "--json", "--sandbox", "workspace-write", "--add-dir", ws, *conf,
-            f"{prompt}\n\n{run_note('codex')}"]
+            f"{prompt}\n\n{run_note('codex', command)}"]
 
 
 def build_argv(agent: str, command: str, arg: str | None) -> list:
@@ -294,7 +308,7 @@ def build_argv(agent: str, command: str, arg: str | None) -> list:
     if agent == "claude":
         return claude_argv(command)
     if agent == "codex":
-        return codex_argv(prompt_for(agent, command, arg))
+        return codex_argv(prompt_for(agent, command, arg), command=command)
     raise RunError(f"Unknown agent `{agent}`.")
 
 

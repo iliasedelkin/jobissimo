@@ -34,9 +34,10 @@ apply only the approved ones.
 ## Setup
 
 ```bash
-RUN_ID="$(date +%Y%m%d_%H%M%S)_optimise"
-python3 scripts/db.py log --run-id $RUN_ID --command optimise --action run_start
+python3 scripts/db.py run-start --command optimise
 ```
+
+It prints the run id (`YYYYMMDD_HHMMSS_optimise`); use it as-is wherever `{RUN_ID}` appears below. Shell variables like `$RUN_ID` don't survive between separate shell calls and can't be pre-approved, so never mint the id with `date`.
 
 ## Analysis – three lenses
 
@@ -112,7 +113,7 @@ change to a single existing config setting gets structured `ops`; everything
 else (positioning prose, knowledge, upstream) leaves `--ops` out:
 
 ```bash
-python3 scripts/db.py suggestion add --run-id $RUN_ID --lens funnel|assets|friction|pending \
+python3 scripts/db.py suggestion add --run-id {RUN_ID} --lens funnel|assets|friction|pending \
   --title "Lower the deep-shortlist fit bar to 3.8" --target config/pipeline.yaml \
   --evidence '{"fit_3_8_replied": 4, "fit_3_8_applied": 9}' \
   --ops '[{"op":"set","file":"pipeline","key":"thresholds.adaptive_fit_bar","to":3.8}]'
@@ -124,7 +125,7 @@ items the user could evidence go to the knowledge inbox, never straight into
 
 ```bash
 python3 scripts/knowledge.py propose --op add_fact --target <BULLET_ID> \
-  --payload '{"fact": "Outcome: ..."}' --by $RUN_ID --note "why this would help"
+  --payload '{"fact": "Outcome: ..."}' --by {RUN_ID} --note "why this would help"
 ```
 
 ## Apply phase (only after user approval)
@@ -140,7 +141,7 @@ Walk the user through the remaining suggestions (AskUserQuestion or plain
 chat), apply the approved diffs exactly, and log each:
 
 ```bash
-python3 scripts/db.py log --run-id $RUN_ID --command optimise \
+python3 scripts/db.py log --run-id {RUN_ID} --command optimise \
   --action suggestion_applied --detail '{"target":"config/...","suggestion":N}'
 ```
 
