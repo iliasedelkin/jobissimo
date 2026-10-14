@@ -102,12 +102,42 @@ Decision: [ ] approve  [ ] reject
 ```
 
 End the report with a short "previously applied changes – did they work?"
-section comparing against the prior report's metrics where possible.
+section comparing against the prior report's metrics where possible. A change
+made through `config.py` carries the config revision before and after
+(`config_changed` events), so results can be split at that point.
+
+Record every suggestion in the ledger as well, so the user can decide it in
+the local UI (`python3 scripts/ui.py` → Pipeline) as easily as in chat. A
+change to a single existing config setting gets structured `ops`; everything
+else (positioning prose, knowledge, upstream) leaves `--ops` out:
+
+```bash
+python3 scripts/db.py suggestion add --run-id $RUN_ID --lens funnel|assets|friction|pending \
+  --title "Lower the deep-shortlist fit bar to 3.8" --target config/pipeline.yaml \
+  --evidence '{"fit_3_8_replied": 4, "fit_3_8_applied": 9}' \
+  --ops '[{"op":"set","file":"pipeline","key":"thresholds.adaptive_fit_bar","to":3.8}]'
+```
+
+Write the ledger id (`OPT-YYYYMMDD-N`) into the report heading. Knowledge-gap
+items the user could evidence go to the knowledge inbox, never straight into
+`knowledge/`:
+
+```bash
+python3 scripts/knowledge.py propose --op add_fact --target <BULLET_ID> \
+  --payload '{"fact": "Outcome: ..."}' --by $RUN_ID --note "why this would help"
+```
 
 ## Apply phase (only after user approval)
 
-Walk the user through suggestions (AskUserQuestion or plain chat), apply the
-approved diffs exactly, and log each:
+First read decisions already made in the UI: `python3 scripts/db.py
+suggestion list`. An `approved` suggestion with `ops` is applied with
+`python3 scripts/config.py apply-suggestion <id>` (it logs the change and
+marks it applied); one without `ops` is applied by you, then marked with
+`db.py suggestion decide <id> --status applied`. Never accept a knowledge
+inbox item on the user's behalf.
+
+Walk the user through the remaining suggestions (AskUserQuestion or plain
+chat), apply the approved diffs exactly, and log each:
 
 ```bash
 python3 scripts/db.py log --run-id $RUN_ID --command optimise \
@@ -115,7 +145,8 @@ python3 scripts/db.py log --run-id $RUN_ID --command optimise \
 ```
 
 Rejected suggestions get `--action suggestion_rejected` so future runs don't
-re-propose them.
+re-propose them — and `db.py suggestion decide <id> --status rejected --reason
+"..."` in the ledger, where the next run checks first.
 
 ## Stdout summary (always end with this)
 

@@ -38,6 +38,10 @@ Nothing personal is ever committed.
 /cycle     the scheduled pass: reconcile (track + refresh) → hunt →
            prepare the most perishable → one report, daily or weekly
 /doctor    config health, value provenance, drift detection
+
+python3 scripts/ui.py   the local UI (127.0.0.1): overview, applications,
+                        knowledge, pipeline, analytics — reads the same
+                        state, writes only through the scripts below
 ```
 
 Commands live in `.claude/commands/` (Claude Code slash commands) as plain
@@ -116,6 +120,27 @@ passed or failed, numbered with no upper limit, plus one row per offer figure.
     `scrub_check.py --outbound <file>`; in Claude Code a PreToolUse hook runs
     that check on every `gh` issue/PR write and blocks on a finding. A
     finding is rewritten, never waived.
+12. **The local UI is a front end to the scripts, never around them.**
+    `scripts/ui.py` reads through `readmodel.py` and writes only by calling
+    `db.py`, `knowledge.py` and `config.py`. It offers no control to submit
+    an application, bypass an audit, force a lifecycle transition, or mark
+    knowledge verified without the user's own accept. Knowledge changes enter
+    through the inbox (`knowledge.py propose`); an agent proposes, the user
+    accepts — `knowledge.py decide` runs only on the user's explicit word.
+    Every config change carries a reason (`config.py set --reason`).
+    The UI may *start* a command in the user's own Claude Code or Codex
+    (`agent_runner.py`): a fixed list with validated arguments, never
+    `/apply`, `/setup` or `/sync`; runs that touch the same things never
+    overlap. Where a command would ask, the question (or a permission
+    request) goes to the user in the run panel and only the user answers it;
+    an unanswered one times out to the safe default (halt the item, never
+    bypass, never submit, never accept a knowledge item). Edits without
+    asking stop at the workspace. What runs may do without asking is set by
+    the user on the Settings page (`agent_setup.py`, writing Claude Code's
+    own `.claude/settings.local.json`). `agent_runner.py`, `agent_setup.py`
+    and `ui.py` are deliberately off both allowlists, and a run asking to
+    start an agent or change agent settings is refused without asking: an
+    agent never launches another agent or grants itself permissions.
 
 ## The four-layer config model
 
@@ -150,10 +175,11 @@ the shipped config templates live in `templates/config/` (see `docs/sync.md`).
 | `engine/schemas/` | JSON Schema for the config files |
 | `packs/product/` | The reference domain pack (roles, evaluation, ATS lexicons, boards, en/it locales verified + de/fr/es/nl/pt stubs) |
 | `packs/generic/` | Minimal fallback; taxonomy generated at setup |
-| `scripts/` | db.py, audit.py, ats_score.py, export.py, paths.py, packs.py, sync.py, intake.py, competency_map.py, coverage.py, setup_check.py, scrub_check.py, migrate.py (all have `--help`) |
+| `scripts/` | db.py, audit.py, ats_score.py, export.py, paths.py, packs.py, sync.py, intake.py, competency_map.py, coverage.py, setup_check.py, scrub_check.py, migrate.py, events.py, assets.py, knowledge.py, config.py, readmodel.py, insights.py, ui.py, agent_runner.py, agent_setup.py (all have `--help`) |
 | `templates/` | ats_reference.docx (clean metadata), knowledge scaffolds, `config/*.example.yaml` (shipped config templates), `workspace.gitignore` (written by `/sync init`) |
 | `config/` (workspace) | GITIGNORED ENTIRELY — identity, targets, languages, boards, capabilities; lives in `$JOBISSIMO_HOME`, resolved via `$JOBISSIMO_CONFIG` → `<workspace>/config` → legacy `<repo>/config` |
 | `profile/` | GITIGNORED ENTIRELY — `$JOBISSIMO_HOME` (resolved via `$JOBISSIMO_HOME` → `.jobissimo` pointer → default): `config/`, `_intake/`, `knowledge/`, `positioning/`, `competency_map.md`, `applicant_profile.yaml`, `setup_state.yaml`, `jd_texts/`, `applications/`, `runs/`, `reports/`, `state/pipeline.db` (+ `state/backup/*.csv`, the committed record) |
+| `ui/` | The local UI: static HTML/CSS + vanilla JS modules, no build step, served by `scripts/ui.py` |
 | `fixtures/`, `tests/` | Synthetic candidate (Sam Rivera) + JDs; offline test suite |
 
 ## Scripts
@@ -175,6 +201,22 @@ the shipped config templates live in `templates/config/` (see `docs/sync.md`).
   `cv_draft.md`.
 - `python3 scripts/export.py --folder <app_folder>` — runs audit, strips
   traces to finals, pandoc DOCX via `templates/ats_reference.docx` (+PDF).
+- `python3 scripts/db.py runs [--orphans]` / `asset record|backfill` /
+  `suggestion add|decide|list` — run pairing (a run_start with no run_end is
+  an orphan), asset fingerprints (`variant_id` = which bullets a CV cites),
+  and the optimiser's suggestion ledger. `db.py log` checks actions against
+  `events.py` (warns; `--strict` refuses).
+- `python3 scripts/knowledge.py propose|decide|list|inbox` — the knowledge
+  inbox: the only mechanical write path into `knowledge/master_experience.md`.
+  A `deprecated` bullet stays for history; audit.py fails a new CV citing it.
+- `python3 scripts/config.py get|set|apply-suggestion` — change one existing
+  setting with `--reason`; logs `config_changed` with the config revision.
+- `readmodel.py` (read-only JSON views), `insights.py` (deterministic
+  diagnostics, Wilson intervals, n ≥ 8), `ui.py` (the local server),
+  `agent_runner.py` (runs of a command in the user's own Claude Code / Codex
+  for the UI — questions, permission requests and replies go to the user;
+  transcripts in `state/agent_runs/`, never synced), `agent_setup.py` (the
+  Settings page: agent sign-in, connectors, run permissions, tools).
 - `paths.py` resolves `$JOBISSIMO_HOME`; `packs.py` loads packs + config;
   `intake.py` converts documents to text; `competency_map.py` / `coverage.py`
   build the map + strength ledger; `setup_check.py` validates config;

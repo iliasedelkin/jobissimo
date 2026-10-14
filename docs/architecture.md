@@ -54,6 +54,15 @@ imported from another install never fails validation on a historical value.
 | `setup_check.py` | Config validator + drift detector (backs `/doctor`) |
 | `scrub_check.py` | PII gate + pre-commit hook |
 | `migrate.py` | Import a pre-OSS workspace (shipped, not run) |
+| `events.py` | Registry of event actions; `db.py log` warns on (or with `--strict` refuses) an unregistered one |
+| `assets.py` | Asset fingerprints: `variant_id` (which bullets a CV cites), `text_hash`, ATS score + scorer version |
+| `knowledge.py` | Knowledge as records + the inbox: the only mechanical write path into `master_experience.md` |
+| `config.py` | Change one existing setting with a reason; logs `config_changed` with the config revision |
+| `readmodel.py` | Read-only JSON views of the whole workspace (behind the UI) |
+| `insights.py` | Deterministic diagnostics with Wilson intervals and minimum samples |
+| `ui.py` | The local UI server (127.0.0.1, token + CSRF); see [ui.md](ui.md) |
+| `agent_runner.py` | Runs a command in the user's own Claude Code / Codex for the UI; relays questions, permission requests and replies |
+| `agent_setup.py` | Checks and sets up what those runs need: sign-in, connectors, permissions, tools (the Settings page) |
 
 ## The ATS scorer, in one paragraph
 

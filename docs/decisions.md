@@ -255,6 +255,86 @@ how long decisions took. An offer had no state of its own and no amount.
 - **v1 backups still import** (no `stages.csv`). Jobs without ledger rows keep
   the old text-derived funnel, so history is not lost before a backfill.
 
+## Product layer, phases 0–1 (schema v3, local UI)
+
+The pipeline could only be operated and inspected through chat. Phase 0 makes
+its state legible; phase 1 puts a small local UI on it.
+
+- **Instrumentation before UI.** Event actions were free text and runs were
+  often left without a `run_end` (orphans, invisible to /optimise). There is
+  now a registry (`events.py`) that `db.py log` checks — warn by default so
+  no history and no mid-run agent is ever blocked, `--strict` in tests —
+  and `db.py runs` pairs starts with ends.
+- **Schema v3 is additive.** Three nullable job columns (`seniority_level`,
+  `country`, `industry`) are *appended*, so a v1/v2 `jobs.csv` is a strict
+  prefix and imports with NULLs; an existing DB is migrated in place by
+  `ALTER TABLE ADD COLUMN`. Two tables: `assets` (fingerprints) and
+  `suggestions` (the optimiser's proposals as addressable records). The
+  planned `config_versions` table was dropped: the revision before/after is
+  carried on each `config_changed` event, which is all the before/after
+  analysis needs.
+- **A CV variant is the set of bullets it cites**, hashed from the `src:`
+  traces /prepare already writes — so every historical folder is
+  fingerprinted without regenerating anything. Nearly every CV is tailored,
+  so exact variants rarely repeat; the UI compares *positioning* (target
+  cluster × language) and per-achievement usage instead, and keeps the
+  variant id for when variants do repeat.
+- **ATS scores are stamped with `SCORER_VERSION`.** The migration parity
+  finding above is what comparing scores across scorer versions looks like.
+- **Knowledge lifecycle lives in one hidden comment** under each bullet
+  heading (`<!-- kb: status=deprecated; on=…; reason=… -->`): the markdown
+  stays the source of truth, the existing parsers ignore comments, and a
+  missing comment means verified (bullets confirmed at /setup). The audit
+  fails a new CV citing a deprecated bullet; `--allow-deprecated` re-audits a
+  historical folder. Merging never combines text or metrics — a duplicate is
+  deprecated in favour of the bullet it duplicates.
+- **The inbox is JSON**, written only by `knowledge.py`: the mini-YAML
+  subset has no safe writer for nested records, and no agent edits it by hand.
+- **The UI is stdlib + vanilla JS modules, no build.** The references
+  (Papermark, Dub, Twenty) set the direction — spacious, one accent, side
+  panels, a funnel that tells a story — not the stack. Adding a toolchain
+  would break "no pip install" and offline CI for no user-visible gain.
+- **Writes are subprocesses, not imports.** Slower by a few milliseconds, but
+  "db.py is the only write path" stays literally true and every refusal
+  carries the script's own message.
+
+## Agent runs from the UI: conversation, permissions, parallel (2026-10)
+
+The first UI runs were headless: the agent could not ask anything, and its
+permission requests had nobody to answer them. In practice most runs could
+not finish — every compound shell command, WebFetch, curl and `sync.py
+status` was denied, Chrome never loaded (runs were started without
+`--chrome`), and a /prepare on a scratch copy wrote its drafts into the real
+workspace (`acceptEdits` + the real workspace listed in
+`.claude/settings.local.json → additionalDirectories`).
+
+- **Claude runs in stream mode with the host answering prompts**
+  (`--input-format stream-json --permission-prompt-tool stdio`, the protocol
+  the Agent SDK uses). A tool outside the permissions and every
+  AskUserQuestion arrive as `can_use_tool` requests and wait in the run
+  panel. "Always allow" returns Claude's own rule suggestion, so Claude
+  writes it to `.claude/settings.local.json` exactly as in the chat.
+- **Edits without asking stop at the workspace**: permission mode `default`
+  plus `Edit(//<workspace>/**)` / `Write(//<workspace>/**)` rules, instead of
+  `acceptEdits` across every additional directory. The run's instructions
+  also name the workspace path.
+- **Codex cannot ask mid-run**, so it ends its turn with its questions; a
+  reply resumes the session (`codex exec resume`). Network and web search are
+  per-run preferences (`sandbox_workspace_write.network_access`,
+  `web_search`), off by default.
+- **Some requests are refused without asking anyone**: starting an agent,
+  opening the UI, or editing agent settings. A user should not have to spot
+  an agent asking to grant itself permissions.
+- **Settings is a page, not a chat step.** `agent_setup.py check` reads
+  sign-in, models and connector status from Claude's `initialize` and
+  `mcp_status` control requests — no prompt, no tokens — plus Codex login and
+  trust, and the tools on PATH. It is the first half of an onboarding flow.
+- **Parallel runs by locks, not by count alone.** Each command declares what
+  it touches (`hunt`, `prepare:<job>`, `browser`, …); two runs whose locks
+  meet never overlap, everything else runs side by side up to a limit.
+- `sync.py status` (local, read-only) joined both allowlists; `ui.py` left
+  them — an agent that could start the UI could start agents through it.
+
 ## Deferred improvements (behaviour left as-is on purpose)
 
 - `coverage.py`'s profile strength score is deliberately blunt (movement, not

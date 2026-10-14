@@ -12,6 +12,13 @@
       "Bash(python3 scripts/coverage.py *)",
       "Bash(python3 scripts/setup_check.py *)",
       "Bash(python3 scripts/scrub_check.py *)",
+      "Bash(python3 scripts/readmodel.py *)",
+      "Bash(python3 scripts/insights.py *)",
+      "Bash(python3 scripts/knowledge.py *)",
+      "Bash(python3 scripts/config.py *)",
+      "Bash(python3 scripts/events.py *)",
+      "Bash(python3 scripts/assets.py *)",
+      "Bash(python3 scripts/sync.py status)",
       "Bash(date *)",
       "Bash(pandoc -v)"
     ]

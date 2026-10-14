@@ -301,6 +301,16 @@ python3 scripts/db.py score --job-id <id> --fit-score X.X --role-cluster PO \
 `score` sets status automatically: `no` → `discarded` (recorded, never
 revisited), `yes`/`maybe` → `shortlisted`.
 
+For `yes`/`maybe` postings, also record the benchmark taxonomy when the JD
+states it plainly — the absolute seniority of the role, the country, and the
+industry. Leave a field unset rather than guess; unknown is a valid value.
+
+```bash
+python3 scripts/db.py set-field --job-id <id> seniority_level junior|mid|senior|lead|principal|exec
+python3 scripts/db.py set-field --job-id <id> country IT          # ISO-3166, or remote_eu / remote_global
+python3 scripts/db.py set-field --job-id <id> industry fintech    # lowercase slug
+```
+
 ### 3d. Originate (only for `yes`/`maybe`)
 
 Find the posting on the employer's own site: careers page, or the underlying

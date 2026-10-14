@@ -13,12 +13,17 @@ mark the job ready on a half-finished export.
 Runs the audit first and refuses to export on FAIL unless --skip-audit
 (bypass must be an explicit user decision recorded in audit_log.md).
 
+Also writes `asset_manifest.json` — the deterministic fingerprint of what was
+exported (which knowledge bullets the CV cites, a hash of the final text; see
+scripts/assets.py) — so the asset can be identified without re-reading it.
+
 State lives in the pipeline DB and is written only via db.py — run
 `python3 scripts/db.py set-status --job-id <id> --status ready` after export.
 """
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import shutil
 import subprocess
@@ -26,6 +31,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import assets  # noqa: E402
 import paths  # noqa: E402
 from audit import validate  # noqa: E402
 
@@ -105,6 +111,8 @@ def main() -> int:
     parser.add_argument("--skip-audit", action="store_true",
                         help="Export even if the audit fails (requires an explicit user bypass).")
     parser.add_argument("--skip-pdf", action="store_true", help="Skip PDF export.")
+    parser.add_argument("--allow-deprecated", action="store_true",
+                        help="Re-export a historical folder citing a since-deprecated bullet.")
     args = parser.parse_args()
 
     folder = paths.resolve_folder(args.folder)
@@ -113,7 +121,7 @@ def main() -> int:
         return 1
 
     if not args.skip_audit:
-        overall, issues, _ = validate(folder)
+        overall, issues, _ = validate(folder, allow_deprecated=args.allow_deprecated)
         if overall != "PASS":
             detail = "\n".join(f"- {i}" for i in issues[:10])
             print(f"ERROR: audit FAIL — adjudicate fix/bypass/halt before export.\n{detail}",
@@ -155,6 +163,8 @@ def main() -> int:
     if not produced:
         print("ERROR: nothing to export (no cv_draft.md / cover_letter_draft.md).", file=sys.stderr)
         return 1
+    (folder / "asset_manifest.json").write_text(
+        json.dumps(assets.fingerprint_all(folder), indent=2) + "\n", encoding="utf-8")
     print(f"Exported: {folder.name}")
     for p in produced:
         print(f"  {p.name}")

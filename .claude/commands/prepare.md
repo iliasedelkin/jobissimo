@@ -305,6 +305,7 @@ python3 scripts/db.py set-field --job-id <id> ats_iterations <0|1|2>
 
 ```bash
 python3 scripts/export.py --folder applications/<folder>      # finals + DOCX (+PDF)
+python3 scripts/db.py asset record --job-id <id> --run-id $RUN_ID  # which bullets, which text, which scorer
 python3 scripts/db.py set-status --job-id <id> --status generated --run-id $RUN_ID
 python3 scripts/db.py set-status --job-id <id> --status ready --run-id $RUN_ID
 ```

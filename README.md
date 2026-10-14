@@ -131,6 +131,17 @@ Claude Code takes them as `/name`, Codex as `$name`. Arguments are the same
 | `/cycle` | The scheduled pass: reconcile, hunt, prepare, one report (daily or weekly) |
 | `/doctor` | Config health, value provenance, drift detection |
 
+### The local UI
+
+`python3 scripts/ui.py` opens a small local web app (127.0.0.1, stdlib only):
+an overview of what needs you, every application with its detail, your
+knowledge base with sources, usage and gaps, the pipeline's settings and
+suggested changes, and analytics. It writes only through the same scripts
+the agents use. Commands run from it in your own Claude Code or Codex — the
+agent's questions and permission requests come to you in a side panel, and
+a Settings page checks sign-in, connectors, permissions and tools. See
+[docs/ui.md](docs/ui.md).
+
 ## Running with Codex
 
 Codex reads `AGENTS.md` (the operating contract; `CLAUDE.md` imports the same

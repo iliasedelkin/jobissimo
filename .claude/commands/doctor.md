@@ -9,6 +9,8 @@ except for re-recording `config/capabilities.yaml` when the user asks.
 ```bash
 python3 scripts/setup_check.py
 python3 scripts/paths.py
+python3 scripts/db.py runs --orphans --limit 10   # runs that never logged run_end
+python3 scripts/events.py --check                 # event actions not in the registry
 ```
 
 Relay the output, then add judgement the script can't:
@@ -18,6 +20,12 @@ Relay the output, then add judgement the script can't:
 - If capabilities changed (pandoc appeared/disappeared, a browser MCP is now
   present), offer to re-run the S0 preflight and update
   `config/capabilities.yaml`.
+- Orphan runs are invisible to `/optimise`'s run statistics. Report the count
+  and the commands they cluster in; a command that orphans repeatedly is an
+  engine finding for `/optimise` lens 3, not something to patch here.
+- Unregistered event actions: name them. A typo of a registered action is a
+  command-file fix (upstream); a genuinely new one belongs in
+  `scripts/events.py`.
 
 ## Provenance questions
 
@@ -26,8 +34,9 @@ Relay the output, then add judgement the script can't:
 2. the intake manifest (`profile/_intake/manifest.yaml`) for extracted facts
    — every bullet's `<!-- from:{src_id}#{locator} -->` points at a source
    document and location
-3. `events` (`db.py export-csv`) for `/optimise`-applied changes
-   (`suggestion_applied` rows name the target and suggestion)
+3. `events` for applied changes: `db.py last-event --action config_changed
+   --match key=<dotted.key>` gives the change, its reason and suggestion id;
+   older changes are `suggestion_applied` rows (`db.py export-csv`)
 4. If none of those explain it, say so plainly — an unexplained config value
    is worth flagging, not papering over.
 

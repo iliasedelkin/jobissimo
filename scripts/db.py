@@ -27,6 +27,8 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import assets  # noqa: E402
+import events as event_registry  # noqa: E402
 import packs  # noqa: E402
 import paths  # noqa: E402
 
@@ -78,6 +80,23 @@ STAGE_COLUMNS = ["job_id", "seq", "kind", "label", "date", "result", "decided",
                  "amount", "currency", "basis", "party", "note",
                  "created_at", "updated_at"]
 RECOMMENDATIONS = ["yes", "maybe", "no"]
+# Absolute seniority of the *role* (schema v3) — the benchmark cohort axis.
+# `seniority_match` stays the relative judgement against the candidate.
+SENIORITY_LEVELS = ["junior", "mid", "senior", "lead", "principal", "exec"]
+# ISO-3166 alpha-2, or a remote scope when the posting names no country.
+COUNTRY_RE = re.compile(r"[A-Z]{2}|remote_eu|remote_global")
+SLUG_RE = re.compile(r"[a-z0-9][a-z0-9_]*")
+ASSET_KINDS = ["cv", "cover_letter"]
+SUGGESTION_STATUSES = ["pending", "approved", "applied", "rejected", "deferred", "dismissed"]
+SUGGESTION_LENSES = ["funnel", "assets", "friction", "pending", "knowledge", "legacy"]
+# pending -> decided; approved -> applied once the change is made; a deferred
+# item can come back. `applied`, `rejected`, `dismissed` are terminal.
+SUGGESTION_TRANSITIONS = {
+    "pending": {"approved", "rejected", "deferred", "dismissed"},
+    "deferred": {"pending", "approved", "rejected", "dismissed"},
+    "approved": {"applied", "rejected", "deferred"},
+    "applied": set(), "rejected": set(), "dismissed": set(),
+}
 PRIORITIES = ["high", "medium", "low"]
 REMOTE_FLAGS = ["remote", "hybrid", "onsite", "unclear"]
 SENIORITY = ["yes", "stretch_up", "stretch_down", "no"]
@@ -100,16 +119,30 @@ JOB_COLUMNS = [
     "recruiter_name", "recruiter_url",
     # bookkeeping
     "created_at", "updated_at",
+    # benchmark taxonomy (schema v3) — appended, so v1/v2 CSVs stay a prefix
+    "seniority_level", "country", "industry",
 ]
+V3_JOB_COLUMNS = ("seniority_level", "country", "industry")
 
 EVENT_COLUMNS = ["id", "ts", "run_id", "command", "job_id", "action", "detail"]
+# One row per generated asset kind per job (latest wins). `variant_id` names
+# the exact set of knowledge bullets the CV cites; `text_hash` the final text.
+ASSET_COLUMNS = ["job_id", "kind", "variant_id", "text_hash", "src_ids", "language",
+                 "ats_score_det", "scorer_version", "created_at"]
+# The optimiser's suggestions as addressable records. `ops` is a JSON list of
+# structured changes config.py can apply (`set` only); prose-only suggestions
+# leave it empty and are applied by the agent after approval.
+SUGGESTION_COLUMNS = ["id", "run_id", "lens", "target", "title", "evidence", "ops",
+                      "status", "reason", "created_at", "decided_at", "applied_at"]
 RESERVATION_COLUMNS = ["source", "max_n"]
 META_COLUMNS = ["key", "value"]
 
 # Bump when the CSV/table shape changes so import-csv can refuse a mismatch.
 # v2: `stages` table (+ stages.csv); offer outcomes split. v1 still imports.
-SCHEMA_VERSION = 2
-IMPORTABLE_SCHEMAS = {1, 2}
+# v3: jobs gain seniority_level/country/industry (appended); `assets` and
+# `suggestions` tables. v1 and v2 still import (missing columns -> NULL).
+SCHEMA_VERSION = 3
+IMPORTABLE_SCHEMAS = {1, 2, 3}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (
@@ -156,7 +189,10 @@ CREATE TABLE IF NOT EXISTS jobs (
     recruiter_name TEXT,
     recruiter_url TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    seniority_level TEXT,
+    country TEXT,
+    industry TEXT
 );
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -183,6 +219,32 @@ CREATE TABLE IF NOT EXISTS stages (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (job_id, seq)
+);
+CREATE TABLE IF NOT EXISTS assets (
+    job_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    variant_id TEXT,
+    text_hash TEXT,
+    src_ids TEXT,
+    language TEXT,
+    ats_score_det INTEGER,
+    scorer_version TEXT,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (job_id, kind)
+);
+CREATE TABLE IF NOT EXISTS suggestions (
+    id TEXT PRIMARY KEY,
+    run_id TEXT,
+    lens TEXT,
+    target TEXT,
+    title TEXT NOT NULL,
+    evidence TEXT,
+    ops TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    reason TEXT,
+    created_at TEXT NOT NULL,
+    decided_at TEXT,
+    applied_at TEXT
 );
 CREATE TABLE IF NOT EXISTS id_reservations (
     source TEXT PRIMARY KEY,
@@ -215,7 +277,18 @@ def connect() -> sqlite3.Connection:
     # `export-csv` is the backup escape hatch.
     conn.execute("PRAGMA journal_mode=MEMORY")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Bring a DB created by an older build up to the current table shape.
+    `CREATE TABLE IF NOT EXISTS` never alters an existing table, so columns
+    added in a later schema are added here, additively and idempotently."""
+    have = {r[1] for r in conn.execute("PRAGMA table_info(jobs)")}
+    for col in V3_JOB_COLUMNS:
+        if col not in have:
+            conn.execute(f"ALTER TABLE jobs ADD COLUMN {col} TEXT")
 
 
 def stamp_write(conn: sqlite3.Connection) -> None:
@@ -488,6 +561,7 @@ def settable_fields(conn: sqlite3.Connection) -> dict:
         "date_applied": None, "applied_via": None, "follow_up_date": None,
         "response_date": None, "interview_stage": None, "outcome": OUTCOMES,
         "notes": None, "recruiter_name": None, "recruiter_url": None,
+        "seniority_level": SENIORITY_LEVELS, "country": None, "industry": None,
     }
 
 
@@ -507,6 +581,11 @@ def cmd_set_field(args) -> None:
         validate_date(value, args.field)
     if args.field == "jd_language" and value:
         validate_language(value)
+    if args.field == "country" and value and not COUNTRY_RE.fullmatch(value):
+        raise DbError("country must be an ISO-3166 alpha-2 code (IT, DE, ...) "
+                      f"or remote_eu / remote_global, got `{value}`.")
+    if args.field == "industry" and value and not SLUG_RE.fullmatch(value):
+        raise DbError(f"industry must be a lowercase slug (fintech, b2b_saas, ...), got `{value}`.")
     if args.field in ("ats_score_det", "ats_iterations") and value is not None:
         if not value.isdigit():
             raise DbError(f"{args.field} must be a non-negative integer.")
@@ -919,6 +998,13 @@ def cmd_log(args) -> None:
                 f"run_end already logged for run `{args.run_id}` at {prior['ts']}. "
                 "A run ends once. Pass --allow-duplicate-run-end to override."
             )
+    problems = event_registry.check(args.action, args.detail)
+    if problems:
+        if args.strict:
+            raise DbError("; ".join(problems) + ". (--strict refuses unregistered events.)")
+        for msg in problems:
+            print(f"# WARNING: {msg} — logged anyway; register it in scripts/events.py.",
+                  file=sys.stderr)
     log_event(conn, run_id=args.run_id, command=args.command_name,
               job_id=args.job_id, action=args.action, detail=args.detail)
     stamp_write(conn)
@@ -955,6 +1041,237 @@ def cmd_last_event(args) -> None:
                 continue
         print(f"{r['ts']}\t{r['run_id']}\t{r['detail'] or ''}")
         return
+
+
+# ---------------------------------------------------------------- runs
+
+def run_summaries(conn: sqlite3.Connection) -> list:
+    """One dict per run_id: command, start/end timestamps, end status, and
+    whether the run is an orphan (a run_start with no run_end). Ordered
+    newest first. Events with no run_id are not runs."""
+    runs: dict = {}
+    for r in conn.execute("SELECT ts, run_id, command, action, detail FROM events "
+                          "WHERE run_id IS NOT NULL ORDER BY id"):
+        run = runs.setdefault(r["run_id"], {"run_id": r["run_id"], "command": r["command"],
+                                            "start": None, "end": None, "status": None,
+                                            "events": 0})
+        run["events"] += 1
+        if r["action"] == "run_start" and run["start"] is None:
+            run["start"] = r["ts"]
+            run["command"] = r["command"]
+        elif r["action"] in ("run_end", "run_complete") and run["end"] is None:
+            run["end"] = r["ts"]
+            try:
+                d = json.loads(r["detail"] or "{}")
+            except json.JSONDecodeError:
+                d = {}
+            run["status"] = (d.get("status") if isinstance(d, dict) else None) or "complete"
+    out = []
+    for run in runs.values():
+        if run["start"] is None and run["end"] is None:
+            continue  # ad-hoc events sharing an id, not a run
+        run["orphan"] = run["start"] is not None and run["end"] is None
+        out.append(run)
+    out.sort(key=lambda r: r["start"] or r["end"] or "", reverse=True)
+    return out
+
+
+def cmd_runs(args) -> None:
+    conn = connect()
+    runs = run_summaries(conn)
+    if args.orphans:
+        runs = [r for r in runs if r["orphan"]]
+    if args.command_name:
+        runs = [r for r in runs if r["command"] == args.command_name]
+    if args.limit:
+        runs = runs[:args.limit]
+    if not runs:
+        print("No runs match.")
+        return
+    for r in runs:
+        state = "ORPHAN (no run_end)" if r["orphan"] else (r["status"] or "-")
+        print(f"{r['run_id']:<34} {r['command'] or '-':<10} {r['start'] or '-':<21} "
+              f"{r['end'] or '-':<21} {state}")
+    orphans = sum(1 for r in run_summaries(conn) if r["orphan"])
+    print(f"\n{len(runs)} run(s) shown; {orphans} orphan(s) in total.")
+
+
+# ---------------------------------------------------------------- assets
+
+def _record_asset(conn, job_id: str, folder: Path, language: str | None) -> list:
+    recorded = []
+    for fp in assets.fingerprint_all(folder):
+        conn.execute(
+            f"INSERT INTO assets ({', '.join(ASSET_COLUMNS)}) VALUES "
+            f"({', '.join('?' * len(ASSET_COLUMNS))}) "
+            "ON CONFLICT(job_id, kind) DO UPDATE SET variant_id=excluded.variant_id, "
+            "text_hash=excluded.text_hash, src_ids=excluded.src_ids, "
+            "language=excluded.language, ats_score_det=excluded.ats_score_det, "
+            "scorer_version=excluded.scorer_version, created_at=excluded.created_at",
+            (job_id, fp["kind"], fp["variant_id"], fp["text_hash"],
+             json.dumps(fp["src_ids"]), language, fp["ats_score_det"],
+             fp["scorer_version"], now_iso()))
+        recorded.append(fp)
+    return recorded
+
+
+def cmd_asset_record(args) -> None:
+    conn = connect()
+    row = require_job(conn, args.job_id)
+    folder_arg = args.folder or row["application_folder"]
+    if not folder_arg:
+        raise DbError(f"{args.job_id} has no application_folder; pass --folder.")
+    folder = paths.resolve_folder(folder_arg)
+    if not folder.is_dir():
+        raise DbError(f"application folder not found: {folder}")
+    recorded = _record_asset(conn, args.job_id, folder, row["jd_language"])
+    if not recorded:
+        raise DbError(f"no cv/cover-letter draft or final in {folder}")
+    for fp in recorded:
+        log_event(conn, run_id=args.run_id, command="asset", job_id=args.job_id,
+                  action="asset_recorded",
+                  detail=json.dumps({"kind": fp["kind"], "variant_id": fp["variant_id"],
+                                     "text_hash": fp["text_hash"],
+                                     "src_count": len(fp["src_ids"])}))
+    stamp_write(conn)
+    conn.commit()
+    for fp in recorded:
+        print(f"{args.job_id} {fp['kind']}: variant {fp['variant_id'] or '-'} "
+              f"text {fp['text_hash']} ({len(fp['src_ids'])} bullets cited"
+              + (f", ats {fp['ats_score_det']}" if fp["ats_score_det"] is not None else "")
+              + (f", scorer {fp['scorer_version']}" if fp["scorer_version"] else "") + ")")
+
+
+def cmd_asset_backfill(args) -> None:
+    """Fingerprint every job whose application_folder exists and has no asset
+    row yet. Idempotent; logs nothing per job (it is a reconstruction, not a
+    pipeline event) and reports a count."""
+    conn = connect()
+    have = {r[0] for r in conn.execute("SELECT DISTINCT job_id FROM assets")}
+    n_jobs = 0
+    for row in conn.execute("SELECT job_id, application_folder, jd_language FROM jobs "
+                            "WHERE application_folder IS NOT NULL").fetchall():
+        if row["job_id"] in have and not args.refresh:
+            continue
+        folder = paths.resolve_folder(row["application_folder"])
+        if folder.is_dir() and _record_asset(conn, row["job_id"], folder, row["jd_language"]):
+            n_jobs += 1
+    stamp_write(conn)
+    conn.commit()
+    print(f"Fingerprinted assets for {n_jobs} job(s).")
+
+
+# ---------------------------------------------------------------- suggestions
+
+def _next_suggestion_id(conn) -> str:
+    stem = f"OPT-{date.today().strftime('%Y%m%d')}-"
+    n = 0
+    for (sid,) in conn.execute("SELECT id FROM suggestions WHERE id LIKE ?", (stem + "%",)):
+        tail = sid[len(stem):]
+        if tail.isdigit():
+            n = max(n, int(tail))
+    return f"{stem}{n + 1}"
+
+
+def validate_ops(raw: str | None) -> str | None:
+    """`ops` is a JSON list of {"op":"set","file":<config name>,"key":<dotted>,
+    "to":<value>} — the only change kind config.py applies mechanically."""
+    if not raw:
+        return None
+    try:
+        ops = json.loads(raw)
+    except json.JSONDecodeError:
+        raise DbError("--ops must be a JSON list.")
+    if not isinstance(ops, list):
+        raise DbError("--ops must be a JSON list.")
+    for op in ops:
+        if not isinstance(op, dict) or op.get("op") != "set" \
+                or not isinstance(op.get("file"), str) or not isinstance(op.get("key"), str) \
+                or "to" not in op:
+            raise DbError('each op must be {"op":"set","file":"pipeline","key":"a.b","to":...}.')
+        if not re.fullmatch(r"[a-z_]+", op["file"]):
+            raise DbError(f"op file must be a config name like `pipeline`, got `{op['file']}`.")
+    return json.dumps(ops, sort_keys=True)
+
+
+def cmd_suggestion_add(args) -> None:
+    conn = connect()
+    if args.lens:
+        require_enum(args.lens, SUGGESTION_LENSES, "lens")
+    sid = args.id or _next_suggestion_id(conn)
+    if not re.fullmatch(r"(OPT|PS)-[0-9A-Za-z-]+", sid):
+        raise DbError(f"suggestion id must look like OPT-YYYYMMDD-N or PS-..., got `{sid}`.")
+    if conn.execute("SELECT 1 FROM suggestions WHERE id=?", (sid,)).fetchone():
+        raise DbError(f"suggestion `{sid}` already exists.")
+    if args.evidence:
+        try:
+            json.loads(args.evidence)
+        except json.JSONDecodeError:
+            raise DbError("--evidence must be valid JSON (an object or list).")
+    ops = validate_ops(args.ops)
+    status = args.status or "pending"
+    require_enum(status, SUGGESTION_STATUSES, "status")
+    ts = now_iso()
+    conn.execute(
+        f"INSERT INTO suggestions ({', '.join(SUGGESTION_COLUMNS)}) VALUES "
+        f"({', '.join('?' * len(SUGGESTION_COLUMNS))})",
+        (sid, args.run_id, args.lens, args.target, args.title, args.evidence, ops,
+         status, args.reason, ts, ts if status != "pending" else None,
+         ts if status == "applied" else None))
+    log_event(conn, run_id=args.run_id, command="suggestion", job_id=None,
+              action="suggestion_added",
+              detail=json.dumps({"id": sid, "lens": args.lens, "target": args.target}))
+    stamp_write(conn)
+    conn.commit()
+    print(f"Added suggestion {sid}: {args.title}")
+
+
+def cmd_suggestion_decide(args) -> None:
+    conn = connect()
+    require_enum(args.status, SUGGESTION_STATUSES, "status")
+    row = conn.execute("SELECT * FROM suggestions WHERE id=?", (args.id,)).fetchone()
+    if row is None:
+        raise DbError(f"Unknown suggestion `{args.id}`.")
+    if args.status == row["status"]:
+        print(f"{args.id} already `{row['status']}`. No change.")
+        return
+    allowed = SUGGESTION_TRANSITIONS.get(row["status"], set())
+    if args.status not in allowed:
+        raise DbError(f"Suggestion `{args.id}` is `{row['status']}`; it can move to "
+                      f"{', '.join(sorted(allowed)) or '(nothing — terminal)'}.")
+    if args.status in ("rejected", "dismissed") and not args.reason:
+        raise DbError(f"--reason is required to mark a suggestion {args.status} "
+                      "(so /optimise does not propose it again).")
+    ts = now_iso()
+    conn.execute("UPDATE suggestions SET status=?, reason=COALESCE(?, reason), decided_at=?, "
+                 "applied_at=CASE WHEN ?='applied' THEN ? ELSE applied_at END WHERE id=?",
+                 (args.status, args.reason, ts, args.status, ts, args.id))
+    log_event(conn, run_id=args.run_id, command="suggestion", job_id=None,
+              action="suggestion_decided",
+              detail=json.dumps({"id": args.id, "status": args.status, "reason": args.reason}))
+    stamp_write(conn)
+    conn.commit()
+    print(f"{args.id}: {row['status']} -> {args.status}")
+
+
+def cmd_suggestion_list(args) -> None:
+    conn = connect()
+    clauses, params = [], []
+    if args.status:
+        for st in args.status:
+            require_enum(st, SUGGESTION_STATUSES, "status")
+        clauses.append(f"status IN ({','.join('?' * len(args.status))})")
+        params += args.status
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    rows = conn.execute(f"SELECT * FROM suggestions {where} ORDER BY created_at DESC, id DESC",
+                        params).fetchall()
+    if not rows:
+        print("No suggestions match.")
+        return
+    for r in rows:
+        print(f"{r['id']:<18} {r['status']:<9} {r['lens'] or '-':<9} {r['title']}"
+              + (f"  → {r['target']}" if r["target"] else ""))
+    print(f"\n{len(rows)} suggestion(s).")
 
 
 # ---------------------------------------------------------------- funnel
@@ -1006,13 +1323,15 @@ def job_progress(job, ledger_rows) -> dict:
             "offer": (job["outcome"] or "") in OFFER_OUTCOMES or "offer:" in _legacy_stage(job)}
 
 
-def funnel_metrics(conn: sqlite3.Connection, rows=None) -> dict:
+def funnel_metrics(conn: sqlite3.Connection | None, rows=None, ledger=None) -> dict:
     """Applied → responded → past screen → passed round 1..N → offer. Round
     depth only counts ledger jobs; with no ledger at all the legacy
-    `interview` link is reported instead."""
+    `interview` link is reported instead. `ledger` ({job_id: [stage rows]})
+    lets a read-only caller pass its own snapshot instead of a connection."""
     if rows is None:
         rows = conn.execute("SELECT * FROM jobs").fetchall()
-    ledger = ledger_by_job(conn)
+    if ledger is None:
+        ledger = ledger_by_job(conn) if conn is not None else {}
     appl = [r for r in rows if r["date_applied"]]
     prog = {r["job_id"]: job_progress(r, ledger.get(r["job_id"])) for r in appl}
     depth = max((p["rounds_passed"] for p in prog.values()), default=0)
@@ -1482,6 +1801,8 @@ CSV_TABLES = [
     ("jobs", JOB_COLUMNS, "job_id"),
     ("events", EVENT_COLUMNS, "id"),
     ("stages", STAGE_COLUMNS, "job_id, seq"),
+    ("assets", ASSET_COLUMNS, "job_id, kind"),
+    ("suggestions", SUGGESTION_COLUMNS, "id"),
     ("id_reservations", RESERVATION_COLUMNS, "source"),
     ("meta", META_COLUMNS, "key"),
 ]
@@ -1574,7 +1895,13 @@ def cmd_import_csv(args) -> None:
         n = 0
         for header, values in _read_csv(path):
             if header != cols:
-                raise DbError(f"{table}.csv header {header} != expected {cols}")
+                # an older schema's jobs.csv is a strict prefix of today's
+                # columns (v3 only appended); the missing tail imports as NULL
+                if table == "jobs" and header == cols[:len(header)] \
+                        and set(cols[len(header):]) <= set(V3_JOB_COLUMNS):
+                    values = values + [None] * (len(cols) - len(header))
+                else:
+                    raise DbError(f"{table}.csv header {header} != expected {cols}")
             if table == "jobs":
                 # pre-v2 `offer` outcome → the explicit accepted outcome
                 i = cols.index("outcome")
@@ -1769,7 +2096,53 @@ def build_parser() -> argparse.ArgumentParser:
     lg.add_argument("--detail", help="JSON string")
     lg.add_argument("--allow-duplicate-run-end", action="store_true",
                     help="Permit a second run_end for a run id that already has one.")
+    lg.add_argument("--strict", action="store_true",
+                    help="Refuse an action not registered in scripts/events.py (default: warn).")
     lg.set_defaults(func=cmd_log)
+
+    rn = sub.add_parser("runs", help="Runs from the event log: start, end, status; "
+                        "orphans are runs with a run_start and no run_end.")
+    rn.add_argument("--orphans", action="store_true", help="Only runs with no run_end.")
+    rn.add_argument("--command", dest="command_name", help="Only this command (hunt, prepare, ...).")
+    rn.add_argument("--limit", type=int, help="Show at most N runs (newest first).")
+    rn.set_defaults(func=cmd_runs)
+
+    asg = sub.add_parser("asset", help="Fingerprint generated assets (which bullets a CV "
+                         "cites, what text was sent, the ATS score and scorer version).")
+    asub = asg.add_subparsers(dest="asset_cmd", required=True)
+    ar = asub.add_parser("record", help="Fingerprint one job's application folder.")
+    ar.add_argument("--job-id", required=True)
+    ar.add_argument("--folder", help="Default: the job's application_folder.")
+    ar.add_argument("--run-id", help="Run id for the event log.")
+    ar.set_defaults(func=cmd_asset_record)
+    ab = asub.add_parser("backfill", help="Fingerprint every prepared job that has no asset row.")
+    ab.add_argument("--refresh", action="store_true", help="Re-fingerprint jobs that already have one.")
+    ab.set_defaults(func=cmd_asset_backfill)
+
+    sug = sub.add_parser("suggestion", help="The optimiser's suggestion ledger: addressable "
+                         "proposals with evidence and decisions.")
+    sgsub = sug.add_subparsers(dest="suggestion_cmd", required=True)
+    sga = sgsub.add_parser("add", help="Record a suggestion (default status pending).")
+    sga.add_argument("--title", required=True)
+    sga.add_argument("--id", help="Default: OPT-YYYYMMDD-N (next free).")
+    sga.add_argument("--lens", choices=SUGGESTION_LENSES)
+    sga.add_argument("--target", help="File the change targets, e.g. config/targets.yaml.")
+    sga.add_argument("--evidence", help="JSON: the numbers/rows that justify it.")
+    sga.add_argument("--ops", help='JSON list of {"op":"set","file":"pipeline","key":"a.b","to":V}.')
+    sga.add_argument("--status", choices=SUGGESTION_STATUSES,
+                     help="Backfill only: record an already-decided suggestion.")
+    sga.add_argument("--reason")
+    sga.add_argument("--run-id")
+    sga.set_defaults(func=cmd_suggestion_add)
+    sgd = sgsub.add_parser("decide", help="approve | reject | defer | dismiss | mark applied.")
+    sgd.add_argument("id")
+    sgd.add_argument("--status", required=True, choices=SUGGESTION_STATUSES)
+    sgd.add_argument("--reason", help="Required for rejected/dismissed.")
+    sgd.add_argument("--run-id")
+    sgd.set_defaults(func=cmd_suggestion_decide)
+    sgl = sgsub.add_parser("list", help="List suggestions, newest first.")
+    sgl.add_argument("--status", action="append", help="Repeatable.")
+    sgl.set_defaults(func=cmd_suggestion_list)
 
     le = sub.add_parser("last-event", help="Print the most recent event for an action "
                         "(ts<TAB>run_id<TAB>detail); empty when none. Read-only watermark query.")

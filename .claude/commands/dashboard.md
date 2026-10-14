@@ -39,6 +39,9 @@ anything – status *changes* belong to `/track`.
 | "what offers do I have?" | `db.py dashboard` → Offers section (or `db.py stats` → Offers) |
 | "what's overdue?" | `db.py stats` → Overdue follow-ups section (or dashboard) |
 
+The same views, with drill-down, are in the local UI: `python3 scripts/ui.py`
+(mention it once if the user asks for something visual).
+
 Resolve company names to job_ids via `db.py list` output. If a request mixes
 viewing with an update ("show stats and mark X applied"), do the update via
 the `/track` procedure first, then show the view.

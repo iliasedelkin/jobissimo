@@ -51,6 +51,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import packs  # noqa: E402
 import paths  # noqa: E402
 
+# Bump on any change that can move a score (weights, extraction, stopwords,
+# matching). Written into every ats_report.md so scores from different scorer
+# versions are never compared as if they were one scale (docs/decisions.md §
+# Migration parity finding records what happens otherwise).
+SCORER_VERSION = "1.0"
+
 MONTHS = "Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec"
 # Canonical range connector is " to "; en dash " – " still accepted for legacy assets.
 RANGE_SEP = r"(?:to|–)"
@@ -368,7 +374,8 @@ def main() -> int:
         return 1
     jd_text = read(jd_path)
 
-    report = ["# ATS Report", "", f"CV: `{cv_path.name}`  JD: `{jd_path.name}`", ""]
+    report = ["# ATS Report", "", f"CV: `{cv_path.name}`  JD: `{jd_path.name}`  "
+              f"Scorer: `{SCORER_VERSION}`", ""]
 
     # Condensed-JD guard: scoring against a summarized JD understates missing
     # keywords (engine/rules/jd_template.md § Raw text requires the full posting).

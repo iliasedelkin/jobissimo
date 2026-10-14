@@ -57,8 +57,8 @@ class TestCsvRoundTrip(unittest.TestCase):
     def test_round_trip_byte_identical(self):
         self.assertEqual(self._export().returncode, 0)
         first = {f.name: f.read_bytes() for f in self.backup.glob("*.csv")}
-        self.assertEqual(set(first), {"jobs.csv", "events.csv", "stages.csv",
-                                      "id_reservations.csv", "meta.csv"})
+        self.assertEqual(set(first), {"jobs.csv", "events.csv", "stages.csv", "assets.csv",
+                                      "suggestions.csv", "id_reservations.csv", "meta.csv"})
         self.assertEqual(first["stages.csv"].decode().count("\n"), 3)  # header + 2
         seq_before = self._events_seq()
 
