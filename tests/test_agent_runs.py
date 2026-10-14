@@ -61,6 +61,14 @@ def scenario(text):
         out({"type": "result", "subtype": "success", "is_error": False, "result": "Continued: " + text,
              "total_cost_usd": 0.02, "session_id": SID})
         return
+    if text.startswith("/prepare"):
+        jid = text.split()[1] if len(text.split()) > 1 else "sample002"
+        d = os.path.join(os.environ["JOBISSIMO_HOME"], "applications", f"2030-01-10_{jid}_co_product-manager")
+        os.makedirs(d, exist_ok=True)
+        open(os.path.join(d, "cv_draft.md"), "w").write("# CV\n")
+        out({"type": "result", "subtype": "success", "is_error": False, "result": "Prepared " + jid,
+             "total_cost_usd": 0.01, "session_id": SID})
+        return
     if "ask" in text:
         r = ask("AskUserQuestion", {"questions": [{"question": "Fix, bypass or halt?", "header": "Audit",
                 "multiSelect": False, "options": [{"label": "Fix", "description": "regenerate"},
@@ -135,6 +143,10 @@ def install_fakes(env: dict, root: Path) -> None:
     env["FAKE_AGENT_ARGV"] = str(root / "argv.jsonl")
     env["JOBISSIMO_CLAUDE_LOCAL_SETTINGS"] = str(root / "settings.local.json")
     env["CODEX_HOME"] = str(root / "codex_home")
+    opener = root / "fake_open"
+    opener.write_text(f"#!/bin/sh\necho \"$1\" >> {root / 'argv.jsonl'}.opened\n")
+    opener.chmod(0o755)
+    env["JOBISSIMO_OPEN_CMD"] = str(opener)
 
 
 def argv_log(env: dict) -> list:
@@ -144,7 +156,8 @@ def argv_log(env: dict) -> list:
 
 class TestRunnerUnits(unittest.TestCase):
     def test_only_whitelisted_commands(self):
-        for cmd, arg, msg in (("apply", "sample001", "cannot be started"), ("sync", None, "cannot be started"),
+        for cmd, arg, msg in (("sync", None, "cannot be started"), ("apply", None, "needs"),
+                              ("apply", "a;b", "not job ids"), ("apply", " ".join(f"j{i}" for i in range(11)), "at most"),
                               ("setup", "--stage x; rm", "takes --resume"),
                               ("rm", None, "Unknown command"), ("prepare", "../etc", "not a job id"),
                               ("track", None, "needs a message"), ("dashboard", "x", "takes no argument"),
@@ -155,6 +168,8 @@ class TestRunnerUnits(unittest.TestCase):
         self.assertEqual(agent_runner.validate("track", "Acme  rejected\nme"), "Acme rejected me")
         self.assertEqual(agent_runner.validate("enrich", "metrics"), "metrics")
         self.assertEqual(agent_runner.validate("setup", "--resume"), "--resume")
+        self.assertEqual(agent_runner.validate("apply", "a1, a2 a1"), "a1 a2")
+        self.assertEqual(agent_runner.locks_for("apply", "a1 a2"), ["browser", "apply:a1", "apply:a2"])
         self.assertIsNone(agent_runner.validate("setup", None))
 
     def test_argv_carries_the_safety_flags(self):
@@ -299,7 +314,7 @@ class TestUiRuns(UiServerBase):
         data = json.loads(body)
         self.assertTrue(data["agents"]["claude"]["available"])
         self.assertTrue(data["agents"]["codex"]["available"])
-        self.assertNotIn("apply", data["commands"])
+        self.assertEqual(data["commands"]["apply"]["agents"], ["claude"])  # asks live, drives Chrome
         self.assertIn("enrich", data["commands"])
 
     def test_claude_run_streams_and_logs(self):
@@ -365,6 +380,22 @@ class TestUiRuns(UiServerBase):
         done = [e["outcome"] for e in events if e["kind"] == "ask_done"]
         self.assertEqual(done, ["answered", "allowed"])
 
+    def test_prepare_links_its_folder_and_it_opens(self):
+        status, out = self.post("/api/runs", {"agent": "claude", "command": "prepare", "arg": "sample002"})
+        self.assertEqual(status, 200, out)
+        run, _ = self.wait_for(out["run"]["id"])
+        self.assertEqual(run["status"], "succeeded", run)
+        self.assertEqual(run["folders"], [{"folder": "2030-01-10_sample002_co_product-manager", "job_id": "sample002"}])
+        status, res = self.post("/api/folders/open", {"folder": run["folders"][0]["folder"]})
+        self.assertEqual(status, 200, res)
+        opened = Path(self.env["FAKE_AGENT_ARGV"] + ".opened").read_text()
+        self.assertTrue(opened.strip().endswith("applications/2030-01-10_sample002_co_product-manager"))
+        # the job's own folder (sample001 has one), and nothing outside applications/
+        self.assertEqual(self.post("/api/folders/open", {"job_id": "sample001"})[0], 200)
+        self.assertEqual(self.post("/api/folders/open", {"job_id": "sample003"})[0], 400)  # not prepared
+        self.assertEqual(self.post("/api/folders/open", {"folder": "../knowledge"})[0], 400)
+        self.assertEqual(self.post("/api/folders/open", {"folder": "nope"})[0], 400)
+
     def test_codex_run_and_reply(self):
         status, out = self.post("/api/runs", {"agent": "codex", "command": "dashboard"})
         self.assertEqual(status, 200, out)
@@ -382,7 +413,8 @@ class TestUiRuns(UiServerBase):
         self.assertEqual(argv[-2], "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
 
     def test_refusals(self):
-        for body, code in (({"agent": "claude", "command": "apply", "arg": "sample001"}, 400),
+        for body, code in (({"agent": "codex", "command": "apply", "arg": "sample001"}, 400),
+                           ({"agent": "claude", "command": "sync"}, 400),
                            ({"agent": "claude", "command": "prepare", "arg": "x; rm -rf /"}, 400),
                            ({"agent": "nope", "command": "dashboard"}, 400)):
             status, out = self.post("/api/runs", body)

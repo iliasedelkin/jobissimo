@@ -245,6 +245,32 @@ def act_launcher(app, what: str, body: dict) -> dict:
     return {"message": out.strip(), "launcher": launcher.status()}
 
 
+def act_open_folder(body: dict) -> dict:
+    """Show an application folder in Finder / the file manager. Read-only: it
+    opens a folder under applications/ and nothing else."""
+    root = paths.applications().resolve()
+    if body.get("job_id"):
+        job_id = _s(body, "job_id", maxlen=64)
+        if not JOB_ID_RE.fullmatch(job_id):
+            raise ApiError(400, "bad job id")
+        job = readmodel.job_view(job_id)
+        if job is None:
+            raise ApiError(404, "Unknown job.")
+        name = job.get("folder_name")
+        if not name:
+            raise ApiError(400, "This posting has no application folder yet — prepare it first.")
+    else:
+        name = _s(body, "folder", maxlen=200)
+    target = (root / Path(str(name)).name).resolve()
+    if target.parent != root or not target.is_dir():
+        raise ApiError(400, "Not an application folder.")
+    try:
+        launcher.open_path(target)
+    except launcher.LaunchError as exc:
+        raise ApiError(400, str(exc))
+    return {"message": f"Opened {target.name}", "folder": target.name}
+
+
 def act_upload(name: str, data: bytes) -> dict:
     """A document for /setup, written by intake.py like every other source."""
     if not name or len(name) > 200:
@@ -497,6 +523,8 @@ def make_handler(app: App):
             m = re.fullmatch(r"/api/settings/(permission|pref|codex-trust|install)", path)
             if m:
                 return act_settings(app, m.group(1), body)
+            if path == "/api/folders/open":
+                return act_open_folder(body)
             m = re.fullmatch(r"/api/launcher/(app|login)", path)
             if m:
                 return act_launcher(app, m.group(1), body)

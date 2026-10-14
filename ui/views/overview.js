@@ -4,7 +4,7 @@ import { icon } from "../icons.js";
 import { pageHead, sectionHead, commandChip, empty, notice } from "../components.js";
 import { go } from "../app.js";
 import { openJob } from "./applications.js";
-import { canRun, startRun } from "../agent.js";
+import { canRun, startRun, runButton } from "../agent.js";
 
 const ACT_ICON = { offer: "offer", follow_up: "send", ready: "send", shortlisted: "applications",
   inbox: "inbox", suggestions: "spark" };
@@ -86,7 +86,10 @@ function trackBox() {
 }
 
 function actRow(a) {
-  const right = a.command
+  const apply = a.kind === "ready" && a.job_ids && a.job_ids.length
+    ? runButton("apply", a.job_ids.join(" "), { label: a.job_ids.length > 1 ? `Apply to ${a.job_ids.length}` : "Apply" }) : null;
+  const right = apply ? h("div", { class: "toolbar", style: { margin: 0, flexWrap: "nowrap" }, onclick: (e) => e.stopPropagation() }, apply)
+    : a.command
     ? h("div", { class: "toolbar", style: { margin: 0, flexWrap: "nowrap" } }, commandChip(a.command))
     : h("span", { class: "row-meta" }, "Open →");
   const open = () => {

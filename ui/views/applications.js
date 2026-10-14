@@ -3,7 +3,9 @@ import { h, get, post, fmt, statusEl, toast, OUTCOME } from "../lib.js";
 import { icon } from "../icons.js";
 import { pageHead, segmented, table, panel, closePanel, commandChip, empty, replacePanelBody } from "../components.js";
 import { setParams, render as rerender, refreshCounts } from "../app.js";
-import { runButton } from "../agent.js";
+import { runButton, assetsButton, canRun } from "../agent.js";
+
+const MAX_APPLY = 10;
 
 const GROUPS = [
   { id: "active", label: "Active", statuses: ["shortlisted", "generated", "ready", "applied", "responded", "offered"] },
@@ -36,8 +38,8 @@ export async function render(route) {
     const rows = data.items.filter((j) => g.statuses.includes(j.status)
       && (!state.source || j.source === state.source)
       && (!q || `${j.company} ${j.title} ${j.job_id}`.toLowerCase().includes(q)));
-    listBox.replaceChildren(rows.length ? jobsTable(rows, g.id) :
-      h("p", { class: "muted" }, q ? `No postings match “${state.q}”.` : "Nothing here."));
+    listBox.replaceChildren(...[bulkBar(rows, g.id), rows.length ? jobsTable(rows, g.id) :
+      h("p", { class: "muted" }, q ? `No postings match “${state.q}”.` : "Nothing here.")].filter(Boolean));
     toolbar.querySelector(".segmented").replaceWith(seg());
   };
   const seg = () => segmented(GROUPS.map((g) => ({ id: g.id, label: g.label, count: counts[g.id] })), state.group,
@@ -53,6 +55,31 @@ export async function render(route) {
   draw();
   if (p.job) openJob(p.job);
   return page;
+}
+
+/** "Apply to these": the ready postings in view, oldest first, one run. */
+function bulkBar(rows, group) {
+  if (group !== "ready") return null;
+  const ready = rows.filter((j) => j.status === "ready")
+    .sort((a, b) => (b.age_days ?? -1) - (a.age_days ?? -1));
+  if (!ready.length || !canRun("apply")) return null;
+  const pick = ready.slice(0, MAX_APPLY);
+  return h("div", { class: "bulk-bar" },
+    h("span", { class: "subtle" }, ready.length > MAX_APPLY
+      ? `${ready.length} ready — a run takes the ${MAX_APPLY} oldest, one at a time.`
+      : `${ready.length} ready to send — one run takes them one at a time, oldest first.`),
+    h("span", { class: "muted" }, "It stops before every submit and asks you."),
+    runButton("apply", pick.map((j) => j.job_id).join(" "), { label: pick.length > 1 ? `Apply to these ${pick.length}` : "Apply", primary: true }));
+}
+
+/** The action a row offers: prepare it, open its assets, or apply. */
+function rowActions(j) {
+  const bits = [];
+  if (j.status === "ready") bits.push(runButton("apply", j.job_id, { label: "Apply" }));
+  bits.push(assetsButton(j));
+  const real = bits.filter(Boolean);
+  if (!real.length) return j.next ? h("span", { class: "subtle" }, j.next) : h("span", { class: "muted" }, "–");
+  return h("div", { class: "row-actions", onclick: (e) => e.stopPropagation() }, real);
 }
 
 function jobsTable(rows, group) {
@@ -72,7 +99,7 @@ function jobsTable(rows, group) {
       showApplied
         ? { key: "applied", label: "Applied", sort: (j) => j.date_applied, render: (j) => fmt.date(j.date_applied) }
         : { key: "age", label: "Found", num: true, sort: (j) => j.age_days, render: (j) => (j.age_days === null ? "–" : `${j.age_days}d ago`) },
-      { key: "next", label: "Next", render: (j) => (j.next ? h("span", { class: "subtle" }, j.next) : h("span", { class: "muted" }, "–")) },
+      { key: "next", label: "Next", render: rowActions },
     ],
   });
 }
@@ -173,12 +200,13 @@ function actionsFor(j, slot) {
   const bar = h("div", { class: "panel-actions" });
   const show = (form) => { slot.replaceChildren(form); form.querySelector("input,select,textarea,button")?.focus(); };
   const s = j.status;
-  if (s === "shortlisted") {
+  if (s === "shortlisted" && !j.folder_name) {
     bar.append(runButton("prepare", j.job_id, { label: "Prepare application", primary: true }) || commandChip(`/prepare ${j.job_id}`));
   }
+  if (s === "ready") bar.append(runButton("apply", j.job_id, { label: "Apply", primary: true }) || commandChip(`/apply ${j.job_id}`));
+  if (j.folder_name) bar.append(assetsButton(j));
   if (s === "ready" || s === "generated") {
-    bar.append(h("button", { class: "btn btn-accent btn-sm", type: "button", onclick: () => show(appliedForm(j)) }, "Mark as applied"),
-      commandChip(`/apply ${j.job_id}`));
+    bar.append(h("button", { class: "btn btn-sm", type: "button", onclick: () => show(appliedForm(j)) }, "Mark as applied"));
   }
   if (s === "applied") bar.append(h("button", { class: "btn btn-sm", type: "button", onclick: () => show(simpleStatus(j, "responded", "Record a reply", "The employer replied (any reply, including a screening call).")) }, "Record a reply"));
   if (["applied", "responded"].includes(s)) bar.append(h("button", { class: "btn btn-sm", type: "button", onclick: () => show(roundForm(j)) }, "Record a round"));

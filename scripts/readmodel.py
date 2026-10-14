@@ -196,6 +196,18 @@ def next_action(job, ledger_rows) -> str | None:
     return None
 
 
+def _folder_name(job) -> str | None:
+    """The application folder's name when it exists on disk (Prepare vs Assets)."""
+    value = job["application_folder"]
+    if not value:
+        return None
+    try:
+        folder = paths.resolve_folder(value)
+    except Exception:
+        return None
+    return folder.name if folder.is_dir() else None
+
+
 def job_summary(job, ctx, assets=None) -> dict:
     ledger = ctx.ledger.get(job["job_id"], [])
     cv = (assets or {}).get(job["job_id"], {}).get("cv") or {}
@@ -214,6 +226,7 @@ def job_summary(job, ctx, assets=None) -> dict:
                     "result": g["result"], "party": g["party"]} for g in ledger],
         "progress": db.job_progress(job, ledger) if job["date_applied"] else None,
         "next": next_action(job, ledger),
+        "folder_name": _folder_name(job),
         "url": job["original_url"] or job["url"],
         "seniority_level": _d(job, "seniority_level"), "country": _d(job, "country"),
         "industry": _d(job, "industry"),
@@ -248,6 +261,7 @@ def last_runs(ctx) -> dict:
 def overview(ctx=None) -> dict:
     ctx = ctx or Ctx()
     jobs = ctx.jobs
+    by_id = {r["job_id"]: r for r in jobs}
     by_status = {}
     for r in jobs:
         by_status[r["status"]] = by_status.get(r["status"], 0) + 1
@@ -268,7 +282,10 @@ def overview(ctx=None) -> dict:
     def queue(statuses):
         rows = [r for r in jobs if r["status"] in statuses]
         ages = [a for a in (_days(r["date_found"], today.isoformat()) for r in rows) if a is not None]
-        return {"count": len(rows), "oldest_days": max(ages) if ages else None}
+        # oldest posting first: the one most likely to close before it is sent
+        order = sorted(rows, key=lambda r: (r["date_found"] or "9999", r["job_id"]))
+        return {"count": len(rows), "oldest_days": max(ages) if ages else None,
+                "job_ids": [r["job_id"] for r in order]}
 
     assets = _assets(ctx)
     in_process = [job_summary(r, ctx, assets) for r in jobs if r["status"] in ("responded", "offered")]
@@ -291,7 +308,8 @@ def overview(ctx=None) -> dict:
     if rq["count"]:
         act.append({"kind": "ready", "title": f"{rq['count']} application{'s' if rq['count'] != 1 else ''} ready to send",
                     "detail": f"Oldest posting found {rq['oldest_days']} days ago" if rq["oldest_days"] is not None else "",
-                    "view": "applications?status=ready", "command": "/apply <job_id>"})
+                    "view": "applications?status=ready", "command": "/apply",
+                    "job_ids": [i for i in rq["job_ids"] if by_id[i]["status"] == "ready"][:10]})
     sq = queue(("shortlisted",))
     if sq["count"]:
         act.append({"kind": "shortlisted", "title": f"{sq['count']} shortlisted to prepare",

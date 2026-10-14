@@ -669,3 +669,10 @@ details.saved .mono { font-size: 12px; margin-top: 4px; }
 .app-card p { margin: 0; color: var(--text-2); }
 .app-card p .icon { color: var(--positive); vertical-align: -3px; }
 @media (max-width: 760px) { .step-card { padding: 16px; gap: 12px; } }
+
+/* ---------------------------------------------------------------- apply / assets */
+.row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.bulk-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; margin-bottom: 14px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-subtle); }
+.bulk-bar .btn { margin-left: auto; }
+.tray-folders { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 10px 14px 0; font-size: 13px; }
