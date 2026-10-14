@@ -239,3 +239,7 @@ PR, and a synonym must bridge wording only — never claim a neighboring skill.
 The offline test suite (`tests/`) must pass, and `scrub_check.py --all` must
 report zero findings, before anything is committed. An issue or PR body must
 pass `scrub_check.py --outbound <file>` before it is posted (invariant 11).
+A change an existing install needs anything for beyond `/sync pull` — a
+schema bump, a one-time command, a moved file — gets an entry in
+`docs/upgrading.md`; `tests/test_upgrading.py` fails on a schema version
+without one and on any command the notes name that no longer exists.

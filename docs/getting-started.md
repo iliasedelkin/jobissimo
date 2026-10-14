@@ -219,5 +219,11 @@ re-record capabilities. Then the daily loop is `/hunt` → `/prepare <job_id>`
 | Claude Code permissions | `.claude/settings.json` (shipped), `.claude/settings.local.json` (yours) | shipped / never |
 | Codex rules and sandbox | `.codex/rules/` (shipped), `~/.codex/config.toml` (yours) | shipped / never |
 
+## Upgrading later
+
+`/sync push`, then `/sync pull` — the pull updates the engine and says when
+there is a one-time step to take. The steps and per-version notes:
+[upgrading.md](upgrading.md).
+
 More: [codex.md](codex.md) (Codex specifics) · [sync.md](sync.md) (workspace
-and backup) · [adapters.md](adapters.md) · [scheduling.md](scheduling.md).
+and backup) · [upgrading.md](upgrading.md) · [adapters.md](adapters.md) · [scheduling.md](scheduling.md).

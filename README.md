@@ -82,6 +82,9 @@ software and needs no sudo; running it again updates the engine. The one
 step it can't do for you is installing Claude Code or Codex and signing in
 once — it tells you how.
 
+**Already installed?** `/sync push`, then `/sync pull` updates the engine;
+[docs/upgrading.md](docs/upgrading.md) lists anything a version needs once.
+
 New to all this? **[docs/getting-started.md](docs/getting-started.md)** walks
 through everything, from installing Claude Code or Codex to connecting the
 browser and mail to the first `/setup`. The chat-only way, for an agent you

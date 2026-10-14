@@ -66,6 +66,15 @@ def current_branch(repo: Path) -> str:
     return git(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() or "HEAD"
 
 
+UPGRADE_NOTES = "docs/upgrading.md"
+
+
+def default_branch(repo: Path, remote: str = "origin") -> str:
+    """The remote's default branch (origin/HEAD), else main."""
+    ref = git(repo, "symbolic-ref", "--short", f"refs/remotes/{remote}/HEAD").stdout.strip()
+    return ref.split("/", 1)[1] if "/" in ref else "main"
+
+
 def has_remote(repo: Path, name: str = "origin") -> bool:
     return name in git(repo, "remote").stdout.split()
 
@@ -253,10 +262,22 @@ def cmd_pull(args) -> int:
         r = git(repo, "pull", "--ff-only")
         after = git(repo, "rev-parse", "HEAD").stdout.strip()
         if r.returncode != 0:
+            err = r.stderr or ""
+            if "no such ref was fetched" in err or "no tracking information" in err:
+                # the usual cause: a feature branch merged and deleted upstream
+                branch, default = current_branch(repo), default_branch(repo)
+                print(f"{label}: the branch `{branch}` this checkout tracks is gone from the remote "
+                      f"(merged and deleted?). Switch to `{default}` and pull again:")
+                print(f"   git -C {repo} checkout {default} && python3 scripts/sync.py pull")
+                return 1
             print(f"{label}: pull failed (not a fast-forward). Divergence — resolve manually:")
-            print("   " + (r.stderr.strip().splitlines() or [""])[0])
+            print("   " + (err.strip().splitlines() or [""])[-1])
             return 1
         print(f"{label}: {'up to date' if before == after else f'updated {before[:7]}..{after[:7]}'}")
+        if label == "engine" and before != after:
+            notes = git(repo, "diff", "--name-only", before, after, "--", UPGRADE_NOTES).stdout.strip()
+            print("   upgrade notes changed — read docs/upgrading.md for one-time steps" if notes
+                  else "   no new upgrade notes (docs/upgrading.md unchanged)")
 
     # Divergence guard on pipeline state: local DB has writes the CSVs lack AND
     # the pulled CSVs also moved => two machines diverged. Never auto-merge.

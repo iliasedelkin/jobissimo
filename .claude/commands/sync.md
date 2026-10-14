@@ -67,6 +67,13 @@ Fast-forward-pulls both repos, reports what changed, and rebuilds the DB with
 the remote CSVs also moved, it **stops and shows both sides** — never merges,
 never picks a winner. Relay the three choices it prints and let the user pick.
 
+When the engine updated, it prints whether `docs/upgrading.md` changed. If it
+did, read the notes for the versions in between and walk the user through
+their one-time steps (each is optional unless it says otherwise). If it
+reports the tracked branch is gone from the remote (a merged feature
+branch), relay the `git checkout` it prints — switching branches is the
+user's call — then pull again.
+
 ## push (end of session)
 
 ```bash
