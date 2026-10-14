@@ -77,7 +77,9 @@ browser adapter; a server may not) and is gitignored inside the workspace;
   or falls back to a public repository.
 - **`/sync pull`** — start of session: fast-forward-pull both repos; rebuild the
   DB from CSVs if they are newer; **stop and show both sides** if pipeline state
-  has diverged (never auto-merge, never pick a winner).
+  has diverged (never auto-merge, never pick a winner). When the engine moved
+  it says whether [upgrading.md](upgrading.md) changed — that page holds any
+  one-time step an update needs.
 - **`/sync push`** — end of session: `export-csv` → `verify-csv` (abort on
   mismatch) → scrub gate over the engine tree and history (abort on any
   finding) → commit the workspace with a message derived from the run's events
